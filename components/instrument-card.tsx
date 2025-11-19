@@ -5,6 +5,7 @@ import { Instrument } from '@/types/entities';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import {Ionicons} from "@expo/vector-icons";
 
 type InstrumentStatus = 'Ativo' | 'Vencido' | 'Em Calibração' | 'Desconhecido';
 
@@ -27,7 +28,6 @@ interface InstrumentCardProps {
 
 const InstrumentCard: React.FC<InstrumentCardProps> = ({ item }) => {
 
-    const cardBg = useThemeColor({}, 'white');
     const titleColor = useThemeColor({}, 'text');
     const detailColor = useThemeColor({}, 'textSecondary');
     const detailBoldColor = useThemeColor({}, 'text');
@@ -38,77 +38,91 @@ const InstrumentCard: React.FC<InstrumentCardProps> = ({ item }) => {
     const theme = useColorScheme() ?? 'light';
 
     const statusTextColor = theme === 'light' ? '#FFFFFF' : '#1A202C';
+    const cardBg = useThemeColor({}, 'white');
+
+    // Pega a cor baseada no status
+    const statusKey = getStatusThemeKey(item.status);
+    const statusColor = useThemeColor({}, statusKey);
+
     return (
         <Link href={`/instruments/${item.id}`} asChild>
-            <Pressable>
+            <Pressable
+                style={({ pressed }) => [
+                    styles.container,
+                    { opacity: pressed ? 0.7 : 1 } // Feedback tátil visual
+                ]}
+            >
                 <View style={[styles.instrumentCard, { backgroundColor: cardBg }]}>
-                    <View style={styles.instrumentCardHeader}>
-                        <Text style={[styles.instrumentName, { color: titleColor }]}>
-                            {item.name}
-                        </Text>
-                        <View
-                            style={[
-                                styles.statusBadge,
-                                { backgroundColor: statusBadgeColor }, // Cor de fundo dinâmica
-                            ]}
-                        >
-                            <Text style={[styles.statusText, { color: statusTextColor }]}>
-                                {item.status}
+                    {/* Barra lateral colorida */}
+                    <View style={[styles.statusStrip, { backgroundColor: statusColor }]} />
+
+                    <View style={styles.contentContainer}>
+                        <View style={styles.headerRow}>
+                            <Text style={[styles.instrumentName, { color: titleColor }]}>
+                                {item.name}
                             </Text>
+                            {/* Opcional: Manter o badge ou usar apenas a cor */}
+                        </View>
+
+                        <View style={styles.infoRow}>
+                            <Ionicons name="barcode-outline" size={14} color={detailColor} />
+                            <Text style={[styles.infoText, { color: detailColor }]}> {item.serial_number}</Text>
+                        </View>
+                        <View style={styles.infoRow}>
+                            <Ionicons name="location-outline" size={14} color={detailColor} />
+                            <Text style={[styles.infoText, { color: detailColor }]}> {item.location || 'Sem local'}</Text>
                         </View>
                     </View>
-                    <Text style={[styles.instrumentDetail, { color: detailColor }]}>
-                        Série: <Text style={[styles.instrumentDetailBold, { color: detailBoldColor }]}>{item.serial_number}</Text>
-                    </Text>
-                    <Text style={[styles.instrumentDetail, { color: detailColor }]}>
-                        Tipo: <Text style={[styles.instrumentDetailBold, { color: detailBoldColor }]}>{item.instrument_type}</Text>
-                    </Text>
+
+                    <Ionicons name="chevron-forward" size={20} color={detailColor} style={{ alignSelf: 'center' }} />
                 </View>
             </Pressable>
         </Link>
     );
 };
 
+
 export default InstrumentCard;
 
 const styles = StyleSheet.create({
-    instrumentCard: {
-        padding: 20,
-        borderRadius: 12,
-        marginBottom: 15,
+    container: {
+        marginBottom: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 5,
-        elevation: 3,
+        shadowOpacity: 0.05, // Sombra muito mais suave
+        shadowRadius: 8,
+        elevation: 2,
     },
-    instrumentCardHeader: {
+    instrumentCard: {
+        borderRadius: 12,
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
+        overflow: 'hidden', // Importante para a barra lateral não vazar
+        paddingRight: 16,
+        minHeight: 90,
+    },
+    statusStrip: {
+        width: 6,
+        height: '100%',
+    },
+    contentContainer: {
+        flex: 1,
+        padding: 16,
+        justifyContent: 'center',
+    },
+    headerRow: {
+        marginBottom: 6,
     },
     instrumentName: {
-        fontSize: 18,
-        fontFamily: Fonts.sansBold,
-        flex: 1,
-    },
-    statusBadge: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-        marginLeft: 10,
-    },
-    statusText: {
-        fontSize: 12,
+        fontSize: 16,
         fontFamily: Fonts.sansSemiBold,
     },
-    instrumentDetail: {
-        fontSize: 14,
+    infoRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 2,
+    },
+    infoText: {
+        fontSize: 13,
         fontFamily: Fonts.sans,
-        marginBottom: 5,
-    },
-    instrumentDetailBold: {
-        fontFamily: Fonts.sansSemiBold,
-    },
+    }
 });

@@ -15,13 +15,9 @@ import {
 } from '@expo-google-fonts/inter';
 
 
-// Previne que a splash screen desapareça
 SplashScreen.preventAutoHideAsync();
 
-
-
 function RootLayoutNav() {
-  // 1. Get the new session loading state
   const { user, isSessionLoading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
@@ -34,27 +30,22 @@ function RootLayoutNav() {
   });
 
   useEffect(() => {
-    // 2. Don't do anything until the auth state is hydrated
     if (isSessionLoading || !fontsLoaded) {
       return;
     }
 
-    const inTabsGroup = segments[0] === '(app)'; // Make sure this matches your folder
+    const inTabsGroup = segments[0] === '(app)';
 
     if (user && !inTabsGroup) {
-      // Redireciona para a tela principal se o usuário estiver logado
-      router.replace('/'); // Use the layout route name
+      router.replace('/');
     } else if (!user) {
-      // Redireciona para a tela de login se o usuário não estiver logado.
       router.replace('/(auth)/login');
     }
 
-    // 3. Hide the splash screen ONLY after we are done loading and have navigated
     SplashScreen.hideAsync();
 
-  }, [user, segments, router, isSessionLoading, fontsLoaded]); // 4. Add isSessionLoading to dependencies
+  }, [user, segments, router, isSessionLoading, fontsLoaded]);
 
-  // 5. Don't render the navigator until we are ready
   if (isSessionLoading || !fontsLoaded) {
     return null;
   }
@@ -65,6 +56,10 @@ function RootLayoutNav() {
           <Stack.Screen name="(app)" options={{ headerShown: false }} />
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+          <Stack.Screen
+              name="calibration-details/[calibrationId]"
+              options={{ headerShown: false }}
+          />
         </Stack>
         <StatusBar style="auto" />
       </ThemeProvider>

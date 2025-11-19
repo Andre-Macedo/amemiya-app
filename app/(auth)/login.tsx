@@ -71,7 +71,6 @@ export default function LoginScreen() {
     );
 }
 
-// ... (estilos permanecem os mesmos) ...
 const styles = StyleSheet.create({
     container: {
         flex: 1,

@@ -2,6 +2,7 @@ import { Drawer } from 'expo-router/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable } from 'react-native';
 import { useThemeColor } from '@/hooks/use-theme-color';
+import {router} from "expo-router";
 
 // Componente de ícone (sem alteração)
 function DrawerIcon({ name, color }: { name: keyof typeof Ionicons.glyphMap; color: string }) {
@@ -26,6 +27,7 @@ function FilterButton() {
 export default function AppLayout() {
     return (
         <Drawer>
+
             <Drawer.Screen
                 name="(tabs)"
                 options={{
@@ -50,13 +52,16 @@ export default function AppLayout() {
                     drawerLabel: 'Instrumentos',
                     title: 'Instrumentos',
                     drawerIcon: ({ color }) => <DrawerIcon name="construct-outline" color={color} />,
-
-                    // --- A MUDANÇA ESTÁ AQUI ---
-                    // Esconde o header do Drawer para esta seção,
-                    // permitindo que o Stack interno assuma.
                     headerShown: false,
-                    // --------------------------
                 }}
+                listeners={{
+                    drawerItemPress: (e) => {
+                        e.preventDefault();
+
+                        router.replace('/instruments');
+                    },
+                }}
+
             />
             <Drawer.Screen
                 name="calibration"

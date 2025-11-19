@@ -18,7 +18,7 @@ export default function InstrumentsScreen() {
 
     return (
         <SafeAreaView style={[styles.container, { backgroundColor: bgColor }]}>
-            {/* Define o header para ESTA tela */}
+
             <Stack.Screen
                 options={{
                     title: 'Instrumentos',
