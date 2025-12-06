@@ -1,116 +1,133 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { DUMMY_INSTRUMENTS } from '@/data/dummyData';
+import { View, Text, StyleSheet, FlatList, Pressable, ActivityIndicator } from 'react-native';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { Calibration } from '@/types/entities';
+import { ScreenHeader } from "@/components/screen-header";
+import { useInstrument } from '@/hooks/use-instruments'; // <--- 1. Importar o Hook
+
+// REMOVIDO: import { DUMMY_INSTRUMENTS } ...
 
 export default function InstrumentHistoryScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
 
-    const instrument = DUMMY_INSTRUMENTS.find(inst => inst.id === id);
+    // 2. Usar o Hook para buscar dados da API
+    const { data: instrument, isLoading } = useInstrument(id);
 
-    // Cores do tema
-    const bgColor = useThemeColor({}, 'background');
+    // Cores
+    const bg = useThemeColor({}, 'background');
     const cardBg = useThemeColor({}, 'white');
-    const textColor = useThemeColor({}, 'text');
-    const textSecondary = useThemeColor({}, 'textSecondary');
-    const borderColor = useThemeColor({}, 'border');
+    const text = useThemeColor({}, 'text');
+    const textSec = useThemeColor({}, 'textSecondary');
+    const border = useThemeColor({}, 'border');
+    const success = useThemeColor({}, 'success');
+    const danger = useThemeColor({}, 'danger');
+    const warning = useThemeColor({}, 'warning');
+    const primary = useThemeColor({}, 'primary');
 
-    // Cores semânticas
-    const successColor = useThemeColor({}, 'success');
-    const dangerColor = useThemeColor({}, 'danger');
-    const warningColor = useThemeColor({}, 'warning');
-
-    if (!instrument) {
+    // 3. Loading State (para não quebrar enquanto carrega)
+    if (isLoading) {
         return (
-            <View style={[styles.container, { backgroundColor: bgColor, justifyContent: 'center', alignItems: 'center' }]}>
-                <Text style={{ color: textSecondary }}>Instrumento não encontrado.</Text>
+            <View style={[styles.container, { backgroundColor: bg, justifyContent: 'center', alignItems: 'center' }]}>
+                <ActivityIndicator size="large" color={primary} />
             </View>
         );
     }
 
+    if (!instrument) return null;
+
     const renderTimelineItem = ({ item, index }: { item: Calibration, index: number }) => {
         const isLast = index === (instrument.calibrations?.length || 0) - 1;
 
-        // Configuração de estilo baseada no resultado
-        let statusColor = textSecondary;
-        let iconName: keyof typeof Ionicons.glyphMap = 'help-circle';
+        // Lógica Visual do Status
+        let statusColor = textSec;
+        let iconName: keyof typeof Ionicons.glyphMap = 'help';
 
-        switch (item.result) {
-            case 'Aprovado':
-                statusColor = successColor;
-                iconName = 'checkmark-circle';
-                break;
-            case 'Reprovado':
-                statusColor = dangerColor;
-                iconName = 'close-circle';
-                break;
-            case 'Em Andamento':
-                statusColor = warningColor;
-                iconName = 'time';
-                break;
+        // Ajuste aqui conforme o que vem da sua API (Aprovado/Reprovado ou approved/rejected)
+        if (item.result === 'Aprovado' || item.result === 'approved') {
+            statusColor = success;
+            iconName = 'checkmark-circle';
+        } else if (item.result === 'Reprovado' || item.result === 'rejected') {
+            statusColor = danger;
+            iconName = 'close-circle';
+        } else {
+            statusColor = warning;
+            iconName = 'time';
         }
 
         return (
             <View style={styles.timelineRow}>
-                {/* Coluna da Esquerda: Linha do Tempo */}
-                <View style={styles.timelineLeft}>
-                    <View style={[styles.iconContainer, { backgroundColor: cardBg }]}>
-                        <Ionicons name={iconName} size={20} color={statusColor} />
+                {/* --- Coluna da Esquerda (Linha do Tempo) --- */}
+                <View style={styles.leftCol}>
+                    <View style={[styles.dot, { backgroundColor: bg, borderColor: statusColor }]}>
+                        <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: statusColor }} />
                     </View>
-                    {!isLast && (
-                        <View style={[styles.timelineLine, { backgroundColor: borderColor }]} />
-                    )}
+                    {!isLast && <View style={[styles.line, { backgroundColor: border }]} />}
                 </View>
 
-                {/* Coluna da Direita: Card de Conteúdo */}
-                <Pressable
-                    onPress={() => router.push(`/calibration-details/${item.id}`)}
-                    style={({ pressed }) => [
-                        styles.cardContainer,
-                        { backgroundColor: cardBg, opacity: pressed ? 0.7 : 1 }
-                    ]}
-                >
-                    <View style={styles.cardHeader}>
-                        <Text style={[styles.dateText, { color: textColor }]}>
-                            {item.calibration_date}
-                        </Text>
-                        <View style={[styles.statusBadge, { backgroundColor: statusColor + '15' }]}>
-                            <Text style={[styles.statusText, { color: statusColor }]}>
-                                {item.result}
+                {/* --- Coluna da Direita (Card) --- */}
+                <View style={{ flex: 1, paddingBottom: 24 }}>
+                    <Pressable
+                        onPress={() => router.push(`/calibration-details/${item.id}`)}
+                        style={({ pressed }) => [
+                            styles.card,
+                            { backgroundColor: cardBg, borderColor: border, opacity: pressed ? 0.7 : 1 }
+                        ]}
+                    >
+                        {/* Cabeçalho do Card */}
+                        <View style={styles.cardHeader}>
+                            <View style={styles.dateBadge}>
+                                <Ionicons name="calendar-outline" size={14} color={textSec} />
+                                <Text style={[styles.dateText, { color: textSec }]}>{item.calibration_date}</Text>
+                            </View>
+                            <View style={[styles.statusBadge, { backgroundColor: statusColor + '15' }]}>
+                                <Ionicons name={iconName} size={14} color={statusColor} style={{ marginRight: 4 }} />
+                                <Text style={[styles.statusText, { color: statusColor }]}>{item.result}</Text>
+                            </View>
+                        </View>
+
+                        {/* Corpo do Card */}
+                        <View style={styles.techRow}>
+                            <View style={[styles.avatarPlaceholder, { backgroundColor: textSec + '30' }]}>
+                                <Text style={{ color: text, fontSize: 12, fontFamily: Fonts.sansBold }}>
+                                    {item.performed_by ? item.performed_by.charAt(0) : '-'}
+                                </Text>
+                            </View>
+                            <Text style={[styles.techName, { color: text }]}>
+                                Téc. {item.performed_by}
                             </Text>
                         </View>
-                    </View>
 
-                    <View style={styles.cardFooter}>
-                        <View>
-                            <Text style={[styles.label, { color: textSecondary }]}>Técnico</Text>
-                            <Text style={[styles.value, { color: textColor }]}>{item.performed_by}</Text>
+                        {/* Seta de Navegação (Sutil) */}
+                        <View style={styles.arrowContainer}>
+                            <Text style={{ fontSize: 12, color: textSec, marginRight: 4 }}>Ver laudo</Text>
+                            <Ionicons name="arrow-forward" size={16} color={textSec} />
                         </View>
-                        <Ionicons name="chevron-forward" size={20} color={textSecondary} />
-                    </View>
-                </Pressable>
+
+                    </Pressable>
+                </View>
             </View>
         );
     };
 
     return (
-        <View style={[styles.container, { backgroundColor: bgColor }]}>
+        <View style={[styles.container, { backgroundColor: bg }]}>
+            <Stack.Screen options={{ title: 'Histórico', headerShadowVisible: false, headerStyle: { backgroundColor: bg } }} />
+
+            <ScreenHeader title="Histórico" showBack />
+
             <FlatList
-                data={instrument.calibrations}
-                keyExtractor={(item) => item.id}
+                data={instrument.calibrations} // Agora usa os dados da API
+                keyExtractor={(item) => item.id.toString()}
                 renderItem={renderTimelineItem}
                 contentContainerStyle={styles.listContent}
                 ListEmptyComponent={
-                    <View style={styles.emptyContainer}>
-                        <Ionicons name="document-text-outline" size={48} color={textSecondary} />
-                        <Text style={[styles.emptyText, { color: textSecondary }]}>
-                            Nenhum histórico encontrado.
-                        </Text>
+                    <View style={styles.emptyBox}>
+                        <Ionicons name="file-tray-outline" size={48} color={textSec} />
+                        <Text style={[styles.emptyText, { color: textSec }]}>Nenhum registro encontrado</Text>
                     </View>
                 }
             />
@@ -118,84 +135,24 @@ export default function InstrumentHistoryScreen() {
     );
 }
 
+// Mantive os estilos exatamente iguais
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-    },
-    listContent: {
-        padding: 20,
-    },
-    timelineRow: {
-        flexDirection: 'row',
-        marginBottom: 0,
-    },
-    timelineLeft: {
-        alignItems: 'center',
-        marginRight: 16,
-        width: 24,
-    },
-    iconContainer: {
-        zIndex: 1, // Garante que o ícone fique sobre a linha
-        borderRadius: 12,
-    },
-    timelineLine: {
-        width: 2,
-        flex: 1,
-        marginTop: 4,
-        marginBottom: 4,
-    },
-    cardContainer: {
-        flex: 1,
-        padding: 16,
-        borderRadius: 12,
-        marginBottom: 24, // Espaço entre os cards
-        // Sombra sutil
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    cardHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    dateText: {
-        fontSize: 16,
-        fontFamily: Fonts.sansBold,
-    },
-    statusBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-    },
-    statusText: {
-        fontSize: 12,
-        fontFamily: Fonts.sansSemiBold,
-    },
-    cardFooter: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    label: {
-        fontSize: 12,
-        fontFamily: Fonts.sans,
-        marginBottom: 2,
-    },
-    value: {
-        fontSize: 14,
-        fontFamily: Fonts.sansSemiBold,
-    },
-    emptyContainer: {
-        alignItems: 'center',
-        marginTop: 50,
-        gap: 10,
-    },
-    emptyText: {
-        fontSize: 16,
-        fontFamily: Fonts.sans,
-    }
+    container: { flex: 1 },
+    listContent: { padding: 20 },
+    timelineRow: { flexDirection: 'row' },
+    leftCol: { width: 40, alignItems: 'center' },
+    dot: { width: 16, height: 16, borderRadius: 8, borderWidth: 2, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+    line: { flex: 1, width: 2, marginTop: -2, marginBottom: -2 },
+    card: { borderRadius: 12, borderWidth: 1, padding: 16 },
+    cardHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
+    dateBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    dateText: { fontSize: 13, fontFamily: Fonts.sans },
+    statusBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
+    statusText: { fontSize: 12, fontFamily: Fonts.sansBold },
+    techRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    avatarPlaceholder: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+    techName: { fontSize: 14, fontFamily: Fonts.sansSemiBold },
+    arrowContainer: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', marginTop: 12 },
+    emptyBox: { alignItems: 'center', marginTop: 60, gap: 12 },
+    emptyText: { fontSize: 16, fontFamily: Fonts.sans }
 });

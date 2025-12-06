@@ -19,7 +19,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "andremacedo.dev.br.leantech.app"
     },
     "web": {
       "output": "static",
@@ -39,11 +40,30 @@
           }
         }
       ],
-      "expo-font"
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": [
+            "central"
+          ],
+          "bluetoothAlwaysPermission": "Permitir acesso ao Bluetooth para conectar ao paquímetro.",
+          "bluetoothPeripheralPermission": "Permitir acesso ao Bluetooth para conectar ao paquímetro."
+        }
+      ],
+      "expo-font",
+      "expo-secure-store",
+      "react-native-ble-plx"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "39cc7e7f-520e-4ed8-acbe-53594dbadeca"
+      }
     }
   }
 }

@@ -7,15 +7,15 @@ import { Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {Ionicons} from "@expo/vector-icons";
 
-type InstrumentStatus = 'Ativo' | 'Vencido' | 'Em Calibração' | 'Desconhecido';
+type InstrumentStatus = 'active' | 'expired' | 'in_calibration' ;
 
 const getStatusThemeKey = (status: InstrumentStatus): 'success' | 'danger' | 'warning' | 'textSecondary' => {
     switch (status) {
-        case 'Ativo':
+        case 'active':
             return 'success';
-        case 'Vencido':
+        case 'expired':
             return 'danger';
-        case 'Em Calibração':
+        case 'in_calibration':
             return 'warning';
         default:
             return 'textSecondary';
@@ -44,6 +44,14 @@ const InstrumentCard: React.FC<InstrumentCardProps> = ({ item }) => {
     const statusKey = getStatusThemeKey(item.status);
     const statusColor = useThemeColor({}, statusKey);
 
+    const handleCalibrate = () => {
+        // Navega para a tela de calibração PASSANDO O PARÂMETRO
+        router.push({
+            pathname: '/(app)/calibration', // Ajuste para sua rota real
+            params: { preselectedInstrumentId: item.id }
+        });
+    };
+
     return (
         <Link href={`/instruments/${item.id}`} asChild>
             <Pressable
@@ -66,11 +74,11 @@ const InstrumentCard: React.FC<InstrumentCardProps> = ({ item }) => {
 
                         <View style={styles.infoRow}>
                             <Ionicons name="barcode-outline" size={14} color={detailColor} />
-                            <Text style={[styles.infoText, { color: detailColor }]}> {item.serial_number}</Text>
+                            <Text style={[styles.infoText, { color: detailColor }]}> {item.stock_number}</Text>
                         </View>
                         <View style={styles.infoRow}>
                             <Ionicons name="location-outline" size={14} color={detailColor} />
-                            <Text style={[styles.infoText, { color: detailColor }]}> {item.location || 'Sem local'}</Text>
+                            <Text style={[styles.infoText, { color: detailColor }]}> {item.station.name || 'Sem local'}</Text>
                         </View>
                     </View>
 
@@ -86,19 +94,20 @@ export default InstrumentCard;
 
 const styles = StyleSheet.create({
     container: {
-        marginBottom: 12,
+        borderRadius: 12,
+        backgroundColor: 'transparent',
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05, // Sombra muito mais suave
-        shadowRadius: 8,
-        elevation: 2,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 10,
+        elevation: 3,
     },
     instrumentCard: {
-        borderRadius: 12,
+        borderRadius: 16,
         flexDirection: 'row',
-        overflow: 'hidden', // Importante para a barra lateral não vazar
+        overflow: 'hidden',
         paddingRight: 16,
-        minHeight: 90,
+        minHeight: 100,
     },
     statusStrip: {
         width: 6,
