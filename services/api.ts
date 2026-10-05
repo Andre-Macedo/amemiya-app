@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getStorageItem } from "@/services/storage";
+import { getStorageItem, removeStorageItem } from "@/services/storage";
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
@@ -32,3 +32,17 @@ api.interceptors.request.use(async (config) => {
     }
     return config;
 });
+
+// Interceptor de resposta para tratar 401 (sessão expirada / banco reiniciado)
+api.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+        if (error.response?.status === 401) {
+            console.warn('[API Interceptor] 401 Unauthorized detectado. Limpando credenciais locais...');
+            await removeStorageItem('auth_token');
+            await removeStorageItem('user_data');
+            delete api.defaults.headers.common['Authorization'];
+        }
+        return Promise.reject(error);
+    }
+);

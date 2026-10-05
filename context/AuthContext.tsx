@@ -4,6 +4,8 @@ import { User } from '@/types/entities';
 import { router } from 'expo-router';
 import { getStorageItem, removeStorageItem, saveStorageItem } from '@/services/storage'; // <--- Importe o helper
 
+import { useQueryClient } from '@tanstack/react-query';
+
 interface AuthContextData {
     user: User | null;
     isSessionLoading: boolean;
@@ -21,6 +23,7 @@ export const AuthProvider: React.FC<PropsWithChildren> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoginLoading, setIsLoginLoading] = useState(false);
     const [isSessionLoading, setIsSessionLoading] = useState(true);
+    const queryClient = useQueryClient();
 
     useEffect(() => {
         async function loadStorageData() {
@@ -68,13 +71,12 @@ export const AuthProvider: React.FC<PropsWithChildren> = ({ children }) => {
             // 5. Atualizar Estado
             setUser(user);
 
-            // Opcional: Redirecionar forçado se o _layout não pegar
-            // router.replace('/');
+            // 6. Recarregar dados das queries frescas do backend
+            await queryClient.invalidateQueries();
 
         } catch (error: any) {
-            console.error("Erro Completo no Login:", error); // Veja isso no terminal se der erro
+            console.error("Erro Completo no Login:", error);
 
-            // Tenta pegar a mensagem do backend, senão usa a do erro genérico
             const msg = error.response?.data?.message || error.message || 'Verifique suas credenciais.';
             alert(`Erro no Login: ${msg}`);
         } finally {
@@ -91,6 +93,7 @@ export const AuthProvider: React.FC<PropsWithChildren> = ({ children }) => {
             await removeStorageItem(TOKEN_KEY);
             await removeStorageItem(USER_KEY);
             delete api.defaults.headers.common['Authorization'];
+            queryClient.clear();
             setUser(null);
             router.replace('/(auth)/login');
         }
