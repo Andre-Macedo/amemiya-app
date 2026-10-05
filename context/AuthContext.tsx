@@ -29,8 +29,12 @@ export const AuthProvider: React.FC<PropsWithChildren> = ({ children }) => {
                 const storedUser = await getStorageItem(USER_KEY);
 
                 if (token && storedUser) {
+                    const parsedUser = JSON.parse(storedUser);
                     api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-                    setUser(JSON.parse(storedUser));
+                    if (parsedUser.tenant_slug || parsedUser.tenant_id) {
+                        api.defaults.headers.common['X-Tenant-ID'] = parsedUser.tenant_slug || parsedUser.tenant_id;
+                    }
+                    setUser(parsedUser);
                 }
             } catch (error) {
                 console.log('Erro ao carregar sessão:', error);
@@ -57,6 +61,9 @@ export const AuthProvider: React.FC<PropsWithChildren> = ({ children }) => {
 
             // 4. Configurar Axios
             api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+            if (user?.tenant_slug || user?.tenant_id) {
+                api.defaults.headers.common['X-Tenant-ID'] = user.tenant_slug || user.tenant_id;
+            }
 
             // 5. Atualizar Estado
             setUser(user);
