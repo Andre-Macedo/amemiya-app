@@ -161,6 +161,11 @@ const DynamicInput =
         };
 
         if (item.question_type === 'numeric') {
+            const nominal = item.nominal_value || parseFloat(item.step.replace(/[^0-9.]/g, '')) || 0;
+            const validNums = readings.map(Number).filter((n: number) => !isNaN(n) && n !== 0);
+            const currentMean = validNums.length > 0 ? validNums.reduce((a: number, b: number) => a + b, 0) / validNums.length : null;
+            const currentDev = (currentMean !== null && nominal > 0) ? (currentMean - nominal) : null;
+
             return (
                 <View style={styles.inputGroup}>
                     <Text style={[styles.label, {color: textSec}]}>{item.step}</Text>
@@ -171,7 +176,8 @@ const DynamicInput =
                             backgroundColor: selectedStandardName ? '#e0f2fe' : inputBg,
                             paddingHorizontal: 10, paddingVertical: 4,
                             borderRadius: 6, borderWidth: 1,
-                            borderColor: selectedStandardName ? '#bae6fd' : 'transparent'
+                            borderColor: selectedStandardName ? '#bae6fd' : 'transparent',
+                            marginBottom: 8
                         }}
                     >
                         <Text style={{
@@ -204,6 +210,20 @@ const DynamicInput =
                             </View>
                         </View>
                     ))}
+
+                    {/* Feedback Visual Instantâneo no Chão de Fábrica */}
+                    {currentDev !== null && (
+                        <View style={{flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 8}}>
+                            <Text style={{fontSize: 12, color: textSec}}>Média: {currentMean?.toFixed(3)} mm</Text>
+                            <Text style={{
+                                fontSize: 12,
+                                fontWeight: 'bold',
+                                color: Math.abs(currentDev) <= 0.02 ? '#34C759' : '#FF3B30'
+                            }}>
+                                Desvio: {currentDev > 0 ? '+' : ''}{currentDev.toFixed(3)} mm
+                            </Text>
+                        </View>
+                    )}
                 </View>
             );
         }
@@ -276,8 +296,10 @@ export default function CalibrationScreen() {
     const [selectingStandardForId, setSelectingStandardForId] = useState<string | null>(null);
 
     const [itemStandards, setItemStandards] = useState<Record<string, number>>({});
-    const [answers, setAnswers] = useState<Record<string, any>>({}); // Agora pode guardar array
-
+    const [answers, setAnswers] = useState<Record<string, any>>({});
+    const [asLeftAnswers, setAsLeftAnswers] = useState<Record<string, any>>({});
+    const [hasAdjustment, setHasAdjustment] = useState<boolean>(false);
+    const [activePhase, setActivePhase] = useState<'as_found' | 'as_left'>('as_found');
 
     const [envData, setEnvData] = useState({temperature: '', humidity: ''});
     const [finalResult, setFinalResult] = useState<'approved' | 'rejected' | 'approved_with_restrictions'>('approved');
@@ -313,11 +335,8 @@ export default function CalibrationScreen() {
 
             // Atualiza a resposta no campo focado automaticamente
             handleUpdateAnswer(focusedField.itemId, focusedField.index, lastValue);
-
-            // Dica de UX: Não remova o foco. O usuário pode querer pisar de novo para corrigir.
-            // O teclado continua aberto e o valor atualiza.
         }
-    }, [lastValue]); // Roda sempre que o ESP32 manda um valor novo
+    }, [lastValue]);
 
     useEffect(() => {
         if (selectedKitId && checklistTemplate && kits) {
@@ -328,12 +347,9 @@ export default function CalibrationScreen() {
 
             checklistTemplate.items.forEach(item => {
                 if (item.question_type === 'numeric') {
-                    // Extrai número do step se nominal_value não vier da API (fallback regex simples)
-                    // No seu PHP: (float) preg_replace('/[^0-9.]/', '', $item->step)
                     const nominalRequired = item.nominal_value || parseFloat(item.step.replace(/[^0-9.]/g, ''));
 
                     if (!isNaN(nominalRequired)) {
-                        // Procura no kit um bloco com valor próximo (tolerância 0.001)
                         const match = kit.children?.find(child =>
                             Math.abs((child.nominal_value || 0) - nominalRequired) < 0.001
                         );
@@ -351,8 +367,6 @@ export default function CalibrationScreen() {
     }, [selectedKitId, checklistTemplate, kits]);
 
 
-    // Hooks
-
     // Cores
     const bg = useThemeColor({}, 'background');
     const cardBgColor = useThemeColor({}, 'white');
@@ -365,15 +379,25 @@ export default function CalibrationScreen() {
     // Helper para achar o kit selecionado
     const selectedKit = useMemo(() => kits?.find(k => k.id === selectedKitId), [kits, selectedKitId]);
 
-    // Função auxiliar para atualizar resposta (refatorada para usar no BLE também)
+    // Função auxiliar para atualizar resposta (com suporte a As-Found e As-Left)
     const handleUpdateAnswer = (itemId: string, index: number, val: string) => {
-        setAnswers(prev => {
-            const currentVal = prev[itemId] || [];
-            const readingsArray = Array.isArray(currentVal) ? [...currentVal] : [];
-            readingsArray[index] = val;
-            return {...prev, [itemId]: readingsArray};
-        });
+        if (hasAdjustment && activePhase === 'as_left') {
+            setAsLeftAnswers(prev => {
+                const currentVal = prev[itemId] || [];
+                const readingsArray = Array.isArray(currentVal) ? [...currentVal] : [];
+                readingsArray[index] = val;
+                return {...prev, [itemId]: readingsArray};
+            });
+        } else {
+            setAnswers(prev => {
+                const currentVal = prev[itemId] || [];
+                const readingsArray = Array.isArray(currentVal) ? [...currentVal] : [];
+                readingsArray[index] = val;
+                return {...prev, [itemId]: readingsArray};
+            });
+        }
     };
+
 
     const handleManualStandardSelect = (standardId: number) => {
         if (selectingStandardForId) {
@@ -397,6 +421,9 @@ export default function CalibrationScreen() {
             setSelectedTemplateId(null);
         }
         setAnswers({});
+        setAsLeftAnswers({});
+        setHasAdjustment(false);
+        setActivePhase('as_found');
         setModalVisible(false);
     };
 
@@ -424,45 +451,63 @@ export default function CalibrationScreen() {
 
         setIsSubmitting(true);
 
-        // Calcula desvio máximo real dos pontos medidos
-        let maxDeviationFound = 0;
+        let maxFoundDev = 0;
+        let maxLeftDev = 0;
+
         const itemsPayload = checklistTemplate?.items.map(item => {
-            const rawAnswer = answers[item.id];
+            const rawFound = answers[item.id];
+            const rawLeft = asLeftAnswers[item.id];
+
             const payloadItem: any = {
                 item_id: item.id,
                 readings: null,
                 as_found_readings: null,
                 as_left_readings: null,
+                adjusted: hasAdjustment,
                 result: null,
                 notes: null,
                 reference_standard_id: null
             };
 
-            if (rawAnswer === undefined || rawAnswer === null) return payloadItem;
-
             if (item.question_type === 'numeric') {
-                const numericArray = Array.isArray(rawAnswer) 
-                    ? rawAnswer.map(Number).filter(n => !isNaN(n)) 
-                    : [Number(rawAnswer)];
-                payloadItem.readings = numericArray;
-                payloadItem.as_found_readings = numericArray;
+                const foundArray = Array.isArray(rawFound) 
+                    ? rawFound.map(Number).filter(n => !isNaN(n)) 
+                    : (rawFound !== undefined && rawFound !== null ? [Number(rawFound)] : null);
+
+                const leftArray = hasAdjustment && Array.isArray(rawLeft)
+                    ? rawLeft.map(Number).filter(n => !isNaN(n))
+                    : (hasAdjustment && rawLeft !== undefined && rawLeft !== null ? [Number(rawLeft)] : null);
+
+                payloadItem.readings = foundArray;
+                payloadItem.as_found_readings = foundArray;
+                payloadItem.as_left_readings = leftArray;
                 payloadItem.reference_standard_id = itemStandards[item.id] || null;
 
                 const nominal = item.nominal_value || parseFloat(item.step.replace(/[^0-9.]/g, '')) || 0;
-                if (nominal > 0 && numericArray.length > 0) {
-                    const dev = calculateMaxDeviation(numericArray, nominal);
-                    if (Math.abs(dev) > Math.abs(maxDeviationFound)) {
-                        maxDeviationFound = dev;
+                if (nominal > 0) {
+                    if (foundArray && foundArray.length > 0) {
+                        const dev = calculateMaxDeviation(foundArray, nominal);
+                        if (Math.abs(dev) > Math.abs(maxFoundDev)) {
+                            maxFoundDev = dev;
+                        }
+                    }
+                    if (leftArray && leftArray.length > 0) {
+                        const dev = calculateMaxDeviation(leftArray, nominal);
+                        if (Math.abs(dev) > Math.abs(maxLeftDev)) {
+                            maxLeftDev = dev;
+                        }
                     }
                 }
             } else if (item.question_type === 'boolean') {
-                payloadItem.result = rawAnswer;
+                payloadItem.result = rawFound;
             } else if (item.question_type === 'text') {
-                payloadItem.notes = rawAnswer;
+                payloadItem.notes = rawFound;
             }
 
             return payloadItem;
         }) || [];
+
+        const finalDeviation = hasAdjustment && maxLeftDev !== 0 ? maxLeftDev : maxFoundDev;
 
         const payload = {
             instrument_id: selectedInstrument?.id,
@@ -474,9 +519,10 @@ export default function CalibrationScreen() {
                 temperature: parseFloat(envData.temperature),
                 humidity: parseFloat(envData.humidity)
             },
-            deviation: maxDeviationFound,
-            uncertainty: 0.005,
-            as_found_deviation: maxDeviationFound,
+            deviation: finalDeviation,
+            as_found_deviation: maxFoundDev,
+            as_left_deviation: hasAdjustment ? maxLeftDev : null,
+            uncertainty: 0.005, // O backend recalcula canonicamente via CalculateCalibrationUncertaintyAction
             notes: notes,
             items: itemsPayload
         };
@@ -502,6 +548,7 @@ export default function CalibrationScreen() {
             setIsSubmitting(false);
         }
     };
+
 
 
     const filteredStandards = useMemo(() => {
@@ -632,24 +679,114 @@ export default function CalibrationScreen() {
 
                     {selectedTemplateId && checklistTemplate && (
                         <View style={{marginTop: 20}}>
-                            <Text style={[styles.sectionTitle, {color: text, marginBottom: 16}]}>4. Medições</Text>
-                            <View style={[styles.formCard, {backgroundColor: cardBgColor}]}>
+                            <View style={{flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12}}>
+                                <Text style={[styles.sectionTitle, {color: text, marginBottom: 0}]}>4. Medições</Text>
+                                
+                                {/* Toggle de Ajuste (As-Found / As-Left) */}
+                                <Pressable
+                                    style={{
+                                        flexDirection: 'row',
+                                        alignItems: 'center',
+                                        backgroundColor: hasAdjustment ? '#FF950022' : border + '30',
+                                        paddingHorizontal: 12,
+                                        paddingVertical: 6,
+                                        borderRadius: 8,
+                                        borderWidth: 1,
+                                        borderColor: hasAdjustment ? '#FF9500' : 'transparent'
+                                    }}
+                                    onPress={() => {
+                                        const next = !hasAdjustment;
+                                        setHasAdjustment(next);
+                                        if (next) setActivePhase('as_left');
+                                        else setActivePhase('as_found');
+                                    }}
+                                >
+                                    <Ionicons 
+                                        name={hasAdjustment ? "checkmark-circle" : "ellipse-outline"} 
+                                        size={16} 
+                                        color={hasAdjustment ? "#FF9500" : textSec} 
+                                    />
+                                    <Text style={{
+                                        fontSize: 12, 
+                                        fontFamily: Fonts.sansSemiBold, 
+                                        color: hasAdjustment ? "#FF9500" : textSec, 
+                                        marginLeft: 6
+                                    }}>
+                                        Houve Ajuste?
+                                    </Text>
+                                </Pressable>
+                            </View>
 
+                            {/* Abas de Ciclo (Como Encontrado vs Pós-Ajuste) */}
+                            {hasAdjustment && (
+                                <View style={{flexDirection: 'row', marginBottom: 14, gap: 10}}>
+                                    <Pressable
+                                        style={{
+                                            flex: 1,
+                                            paddingVertical: 10,
+                                            borderRadius: 8,
+                                            alignItems: 'center',
+                                            backgroundColor: activePhase === 'as_found' ? primary : cardBgColor,
+                                            borderWidth: 1,
+                                            borderColor: activePhase === 'as_found' ? primary : border
+                                        }}
+                                        onPress={() => setActivePhase('as_found')}
+                                    >
+                                        <Text style={{
+                                            fontSize: 12, 
+                                            fontFamily: Fonts.sansSemiBold, 
+                                            color: activePhase === 'as_found' ? '#fff' : textSec
+                                        }}>
+                                            1. Como Encontrado (As-Found)
+                                        </Text>
+                                    </Pressable>
+
+                                    <Pressable
+                                        style={{
+                                            flex: 1,
+                                            paddingVertical: 10,
+                                            borderRadius: 8,
+                                            alignItems: 'center',
+                                            backgroundColor: activePhase === 'as_left' ? primary : cardBgColor,
+                                            borderWidth: 1,
+                                            borderColor: activePhase === 'as_left' ? primary : border
+                                        }}
+                                        onPress={() => setActivePhase('as_left')}
+                                    >
+                                        <Text style={{
+                                            fontSize: 12, 
+                                            fontFamily: Fonts.sansSemiBold, 
+                                            color: activePhase === 'as_left' ? '#fff' : textSec
+                                        }}>
+                                            2. Pós-Ajuste (As-Left)
+                                        </Text>
+                                    </Pressable>
+                                </View>
+                            )}
+
+                            <View style={[styles.formCard, {backgroundColor: cardBgColor}]}>
                                 {checklistTemplate.items.map((item) => {
                                     const stdId = itemStandards[item.id];
-
                                     let std = allStandards?.find(s => s.id === stdId);
-
                                     const stdName = (std?.name ?? 'Bloco') + ' ' + (std?.effective_stock_number ?? 'SRL - 0000');
+
+                                    const currentVal = (hasAdjustment && activePhase === 'as_left')
+                                        ? asLeftAnswers[item.id]
+                                        : answers[item.id];
 
                                     return (
                                         <DynamicInput
                                             key={item.id}
                                             item={item}
-                                            value={answers[item.id]}
-                                            onChange={(val) => setAnswers(prev => ({...prev, [item.id]: val}))}
+                                            value={currentVal}
+                                            onChange={(val) => {
+                                                if (hasAdjustment && activePhase === 'as_left') {
+                                                    setAsLeftAnswers(prev => ({...prev, [item.id]: val}));
+                                                } else {
+                                                    setAnswers(prev => ({...prev, [item.id]: val}));
+                                                }
+                                            }}
                                             onFocusField={(index) => setFocusedField({itemId: item.id, index})}
-
                                             selectedStandardName={stdName}
                                             onPressStandard={() => setSelectingStandardForId(item.id)}
                                         />
@@ -657,8 +794,8 @@ export default function CalibrationScreen() {
                                 })}
                             </View>
                         </View>
-
                     )}
+
 
                     {/*/!* PASSO 3: Preenchimento *!/*/}
                     {/*{selectedTemplateId && (*/}
