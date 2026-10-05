@@ -1,22 +1,43 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { PermissionsAndroid, Platform } from 'react-native';
-import { BleManager, Device } from 'react-native-ble-plx';
-import { atob } from 'react-native-quick-base64'; // Se der erro aqui, veja a nota abaixo*
+import { BleManager, Device, Subscription } from 'react-native-ble-plx';
+import * as Haptics from 'expo-haptics';
 
-// UUIDs do seu ESP32
-const SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
-const CHAR_UUID_TX = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";
+import {
+    BleConnectionStatus,
+    BleDeviceDriver,
+    MetrologyBleReading,
+    PairedBleDevice
+} from '@/services/ble/ble-types';
+import {
+    REGISTERED_DRIVERS,
+    findMatchingDriver,
+    NordicUartDriver,
+    createGenericCustomDriver
+} from '@/services/ble/drivers';
+import {
+    getPairedBleDevices,
+    savePairedBleDevice
+} from '@/services/ble/paired-devices-storage';
 
 export function useBLE() {
     const manager = useMemo(() => new BleManager(), []);
 
     const [device, setDevice] = useState<Device | null>(null);
-    const [connectionStatus, setConnectionStatus] = useState('Desconectado');
+    const [connectionStatus, setConnectionStatus] = useState<BleConnectionStatus>('Desconectado');
     const [lastValue, setLastValue] = useState<string | null>(null);
+    const [activeReading, setActiveReading] = useState<MetrologyBleReading | null>(null);
+    const [activeDriver, setActiveDriver] = useState<BleDeviceDriver>(NordicUartDriver);
+    const [scannedDevices, setScannedDevices] = useState<Device[]>([]);
+    const [pairedDevices, setPairedDevices] = useState<PairedBleDevice[]>([]);
 
+    // Carrega dispositivos pareados no início
+    useEffect(() => {
+        getPairedBleDevices().then(setPairedDevices).catch(console.warn);
+    }, []);
 
-    // 1. Permissões Robustas
-    const requestPermissions = async () => {
+    // 1. Permissões Android 12+ e Anteriores
+    const requestPermissions = useCallback(async (): Promise<boolean> => {
         if (Platform.OS === 'android') {
             if (Platform.Version >= 31) {
                 const result = await PermissionsAndroid.requestMultiple([
@@ -37,95 +58,159 @@ export function useBLE() {
             }
         }
         return true;
-    };
+    }, []);
 
-    // 2. Escanear e Conectar
-    const scanAndConnect = async () => {
-        const permission = await requestPermissions();
-        if (!permission) {
-            console.log("Permissão negada");
-            return;
-        }
-
-        setConnectionStatus('Escaneando...');
-
-        manager.startDeviceScan(null, null, (error, scannedDevice) => {
-            if (error) {
-                console.warn(error);
-                setConnectionStatus('Erro Scan');
-                return;
-            }
-
-            // Filtro pelo nome do ESP32
-            if (scannedDevice && (scannedDevice.name === 'EspDRO_BT' || scannedDevice.name === 'EspDRO_BLE')) {
-                manager.stopDeviceScan();
-                connectToDevice(scannedDevice);
-            }
-        });
-    };
-
-    // 3. Conectar e Monitorar
-    const connectToDevice = async (device: Device) => {
+    // 2. Conectar a um dispositivo usando um Driver específico
+    const connectToDevice = useCallback(async (targetDevice: Device, driver: BleDeviceDriver) => {
         try {
             setConnectionStatus('Conectando...');
-            const connectedDevice = await device.connect();
+            const connectedDevice = await targetDevice.connect();
             setDevice(connectedDevice);
+            setActiveDriver(driver);
 
             await connectedDevice.discoverAllServicesAndCharacteristics();
             setConnectionStatus('Conectado');
 
-            // INICIAR ESCUTA (Subscribe)
-            startStreaming(connectedDevice);
+            // Salva na lista de pareados para reconexão rápida
+            await savePairedBleDevice({
+                id: connectedDevice.id,
+                name: connectedDevice.name || 'Dispositivo Metrológico',
+                driverId: driver.id,
+                customServiceUuid: driver.serviceUuid,
+                customCharUuid: driver.characteristicUuid,
+            });
+            const updated = await getPairedBleDevices();
+            setPairedDevices(updated);
 
+            // Inicia streaming com o driver escolhido
+            startStreaming(connectedDevice, driver);
+
+            // Feedback háptico de conexão realizada
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
         } catch (e) {
-            console.log('Erro ao conectar', e);
+            console.error('[useBLE] Erro ao conectar:', e);
             setConnectionStatus('Erro Conexão');
             setDevice(null);
         }
-    };
+    }, []);
 
-    // 4. Ler Dados em Tempo Real
-    const startStreaming = async (device: Device) => {
-        device.monitorCharacteristicForService(
-            SERVICE_UUID,
-            CHAR_UUID_TX,
+    // 3. Iniciar Escuta (Monitor / Subscribe) da Característica
+    const startStreaming = useCallback((connectedDevice: Device, driver: BleDeviceDriver) => {
+        let subscription: Subscription | null = null;
+
+        subscription = connectedDevice.monitorCharacteristicForService(
+            driver.serviceUuid,
+            driver.characteristicUuid,
             (error, characteristic) => {
                 if (error) {
                     if (error.errorCode === 201) return; // Dispositivo desconectou
-                    console.log('Erro leitura:', error);
+                    console.warn('[useBLE] Erro de monitoramento:', error);
                     return;
                 }
 
                 if (characteristic?.value) {
-                    // O dado vem em Base64 do ESP32. Precisamos converter para texto.
-                    const rawBase64 = characteristic.value;
-                    const text = atob(rawBase64);
+                    const parsed = driver.parseReading(characteristic.value);
+                    if (parsed) {
+                        // Atualiza os estados
+                        setLastValue(parsed.rawString);
+                        setActiveReading(parsed);
 
-                    console.log(">>> ESP32 ENVIOU:", text); // Deve aparecer "32.92"
-                    setLastValue(text);
+                        // Feedback háptico instantâneo na captura de cada cota
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                    }
                 }
             }
         );
-    };
 
-    // Função manual de atob caso não queira instalar 'react-native-quick-base64'
-    const atob = (input: string) => {
-        const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-        let str = input.replace(/=+$/, '');
-        let output = '';
-        if (str.length % 4 == 1) throw new Error("'atob' failed");
-        for (let bc = 0, bs = 0, buffer, i = 0;
-             buffer = str.charAt(i++);
-             ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer,
-             bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0
-        ) { buffer = chars.indexOf(buffer); }
-        return output;
-    }
+        return () => {
+            subscription?.remove();
+        };
+    }, []);
+
+    // 4. Escanear e Conectar Automaticamente (Compatibilidade Total com ESP32 atual)
+    const scanAndConnect = useCallback(async () => {
+        const permission = await requestPermissions();
+        if (!permission) {
+            console.log('[useBLE] Permissão BLE negada');
+            return;
+        }
+
+        setConnectionStatus('Escaneando...');
+        setScannedDevices([]);
+
+        manager.startDeviceScan(null, null, (error, scannedDevice) => {
+            if (error) {
+                console.warn('[useBLE] Erro Scan:', error);
+                setConnectionStatus('Erro Scan');
+                return;
+            }
+
+            if (scannedDevice) {
+                // Adiciona na lista geral de escaneados
+                setScannedDevices(prev => {
+                    if (prev.some(d => d.id === scannedDevice.id)) return prev;
+                    return [...prev, scannedDevice];
+                });
+
+                // Auto-conectar ao ESP32 do usuário se detectado (comportamento original preservado!)
+                const name = scannedDevice.name;
+                if (name === 'EspDRO_BT' || name === 'EspDRO_BLE') {
+                    manager.stopDeviceScan();
+                    connectToDevice(scannedDevice, NordicUartDriver);
+                }
+            }
+        });
+    }, [manager, requestPermissions, connectToDevice]);
+
+    // 5. Conexão Manual a qualquer dispositivo com driver selecionado
+    const connectWithDriver = useCallback(async (
+        targetDevice: Device,
+        driverId: string,
+        customUuids?: { serviceUuid: string; charUuid: string }
+    ) => {
+        manager.stopDeviceScan();
+
+        let driver: BleDeviceDriver | undefined;
+        if (driverId === 'generic-custom' && customUuids) {
+            driver = createGenericCustomDriver(customUuids.serviceUuid, customUuids.charUuid);
+        } else {
+            driver = REGISTERED_DRIVERS.find(d => d.id === driverId) ||
+                     findMatchingDriver(targetDevice.name, targetDevice.serviceUUIDs);
+        }
+
+        await connectToDevice(targetDevice, driver);
+    }, [manager, connectToDevice]);
+
+    const disconnect = useCallback(async () => {
+        if (device) {
+            try {
+                await device.cancelConnection();
+            } catch (e) {
+                console.warn('[useBLE] Erro ao desconectar:', e);
+            }
+        }
+        setDevice(null);
+        setConnectionStatus('Desconectado');
+        setLastValue(null);
+        setActiveReading(null);
+    }, [device]);
 
     return {
+        // Campos originais preservados (100% retrocompatível)
         scanAndConnect,
         connectionStatus,
         lastValue,
-        isConnected: !!device
+        isConnected: !!device,
+
+        // Novos recursos universais
+        device,
+        activeReading,
+        activeDriver,
+        scannedDevices,
+        pairedDevices,
+        allDrivers: REGISTERED_DRIVERS,
+        connectWithDriver,
+        disconnect,
+        stopScan: () => manager.stopDeviceScan()
     };
 }

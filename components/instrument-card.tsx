@@ -1,21 +1,26 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { Instrument } from '@/types/entities';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import {Ionicons} from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 
-type InstrumentStatus = 'active' | 'expired' | 'in_calibration' ;
-
-const getStatusThemeKey = (status: InstrumentStatus): 'success' | 'danger' | 'warning' | 'textSecondary' => {
+const getStatusThemeKey = (status: any): 'success' | 'danger' | 'warning' | 'textSecondary' => {
     switch (status) {
         case 'active':
+        case 'Ativo':
             return 'success';
         case 'expired':
+        case 'Vencido':
+        case 'rejected':
+        case 'Reprovado':
             return 'danger';
         case 'in_calibration':
+        case 'Em Calibração':
+        case 'maintenance':
+        case 'Em Manutenção':
             return 'warning';
         default:
             return 'textSecondary';
@@ -27,6 +32,7 @@ interface InstrumentCardProps {
 }
 
 const InstrumentCard: React.FC<InstrumentCardProps> = ({ item }) => {
+    const router = useRouter();
 
     const titleColor = useThemeColor({}, 'text');
     const detailColor = useThemeColor({}, 'textSecondary');
@@ -36,20 +42,13 @@ const InstrumentCard: React.FC<InstrumentCardProps> = ({ item }) => {
     const statusBadgeColor = useThemeColor({}, statusThemeKey);
 
     const theme = useColorScheme() ?? 'light';
-
-    const statusTextColor = theme === 'light' ? '#FFFFFF' : '#1A202C';
     const cardBg = useThemeColor({}, 'white');
 
-    // Pega a cor baseada no status
-    const statusKey = getStatusThemeKey(item.status);
-    const statusColor = useThemeColor({}, statusKey);
-
     const handleCalibrate = () => {
-        // Navega para a tela de calibração PASSANDO O PARÂMETRO
         router.push({
-            pathname: '/(app)/calibration', // Ajuste para sua rota real
+            pathname: '/calibration',
             params: { preselectedInstrumentId: item.id }
-        });
+        } as any);
     };
 
     return (
@@ -57,28 +56,33 @@ const InstrumentCard: React.FC<InstrumentCardProps> = ({ item }) => {
             <Pressable
                 style={({ pressed }) => [
                     styles.container,
-                    { opacity: pressed ? 0.7 : 1 } // Feedback tátil visual
+                    { opacity: pressed ? 0.7 : 1 }
                 ]}
             >
-                <View style={[styles.instrumentCard, { backgroundColor: cardBg }]}>
-                    {/* Barra lateral colorida */}
-                    <View style={[styles.statusStrip, { backgroundColor: statusColor }]} />
-
-                    <View style={styles.contentContainer}>
-                        <View style={styles.headerRow}>
-                            <Text style={[styles.instrumentName, { color: titleColor }]}>
-                                {item.name}
-                            </Text>
-                            {/* Opcional: Manter o badge ou usar apenas a cor */}
+                <View style={[styles.card, { backgroundColor: cardBg }]}>
+                    <View style={styles.topRow}>
+                        <Text style={[styles.name, { color: titleColor }]} numberOfLines={1}>
+                            {item.name}
+                        </Text>
+                        <View style={[styles.badge, { backgroundColor: statusBadgeColor }]}>
+                            <Text style={styles.badgeText}>{item.status}</Text>
                         </View>
+                    </View>
 
+                    <Text style={[styles.type, { color: detailColor }]}>
+                        {item.instrument_type}
+                    </Text>
+
+                    <View style={styles.divider} />
+
+                    <View style={styles.bottomRow}>
                         <View style={styles.infoRow}>
                             <Ionicons name="barcode-outline" size={14} color={detailColor} />
-                            <Text style={[styles.infoText, { color: detailColor }]}> {item.stock_number}</Text>
+                            <Text style={[styles.infoText, { color: detailColor }]}> {item.stock_number || item.serial_number}</Text>
                         </View>
                         <View style={styles.infoRow}>
                             <Ionicons name="location-outline" size={14} color={detailColor} />
-                            <Text style={[styles.infoText, { color: detailColor }]}> {item.station.name || 'Sem local'}</Text>
+                            <Text style={[styles.infoText, { color: detailColor }]}> {item.station?.name || item.location || 'Sem local'}</Text>
                         </View>
                     </View>
 
@@ -89,49 +93,64 @@ const InstrumentCard: React.FC<InstrumentCardProps> = ({ item }) => {
     );
 };
 
-
 export default InstrumentCard;
 
 const styles = StyleSheet.create({
     container: {
-        borderRadius: 12,
-        backgroundColor: 'transparent',
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 10,
-        elevation: 3,
+        marginBottom: 12,
     },
-    instrumentCard: {
-        borderRadius: 16,
-        flexDirection: 'row',
-        overflow: 'hidden',
-        paddingRight: 16,
-        minHeight: 100,
-    },
-    statusStrip: {
-        width: 6,
-        height: '100%',
-    },
-    contentContainer: {
-        flex: 1,
+    card: {
         padding: 16,
-        justifyContent: 'center',
+        borderRadius: 12,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
     },
-    headerRow: {
-        marginBottom: 6,
+    topRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 4,
     },
-    instrumentName: {
-        fontSize: 16,
+    name: {
         fontFamily: Fonts.sansSemiBold,
+        fontSize: 16,
+        flex: 1,
+        marginRight: 8,
+    },
+    badge: {
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 12,
+    },
+    badgeText: {
+        color: '#FFFFFF',
+        fontFamily: Fonts.sansSemiBold,
+        fontSize: 11,
+    },
+    type: {
+        fontFamily: Fonts.sans,
+        fontSize: 13,
+        marginBottom: 12,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: '#0000000a',
+        marginBottom: 12,
+    },
+    bottomRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
     },
     infoRow: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 2,
     },
     infoText: {
-        fontSize: 13,
         fontFamily: Fonts.sans,
-    }
+        fontSize: 12,
+    },
 });

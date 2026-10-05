@@ -1,7 +1,7 @@
 import { Drawer } from 'expo-router/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColor } from '@/hooks/use-theme-color';
-import { Fonts } from '@/constants/theme'; // Importe as fontes para estilizar o drawer
+import { Fonts } from '@/constants/theme';
 
 function DrawerIcon({ name, color }: { name: keyof typeof Ionicons.glyphMap; color: string }) {
     return <Ionicons name={name} size={22} color={color} />;
@@ -15,23 +15,22 @@ export default function AppLayout() {
     return (
         <Drawer
             screenOptions={{
-                headerShown: false, // Esconde o header padrão do drawer em TODAS as telas (vamos usar headers customizados)
+                headerShown: false,
                 drawerActiveTintColor: activeTint,
                 drawerInactiveTintColor: text,
                 drawerStyle: {
                     backgroundColor: drawerBg,
-                    width: 280, // Largura um pouco mais elegante
+                    width: 290,
                 },
                 drawerLabelStyle: {
                     fontFamily: Fonts.sansSemiBold,
-                    marginLeft: -10, // Aproxima texto do ícone
+                    marginLeft: -8,
                 },
-                drawerType: 'slide', // Animação mais moderna
+                drawerType: 'slide',
             }}
         >
-            {/* Rota Inicial agora é direta, sem Tabs */}
             <Drawer.Screen
-                name="index" // Aponta para app/(app)/index.tsx
+                name="index"
                 options={{
                     drawerLabel: 'Dashboard',
                     title: 'Dashboard',
@@ -58,6 +57,51 @@ export default function AppLayout() {
             />
 
             <Drawer.Screen
+                name="intermediate-check"
+                options={{
+                    drawerLabel: 'Checagem Shewhart',
+                    title: 'Checagem Intermediária',
+                    drawerIcon: ({ color }) => <DrawerIcon name="analytics-outline" color={color} />,
+                }}
+            />
+
+            <Drawer.Screen
+                name="stations/index"
+                options={{
+                    drawerLabel: 'Máquinas & Células',
+                    title: 'Máquinas',
+                    drawerIcon: ({ color }) => <DrawerIcon name="business-outline" color={color} />,
+                }}
+            />
+
+            <Drawer.Screen
+                name="iot/index"
+                options={{
+                    drawerLabel: 'Sensores IoT & IHM',
+                    title: 'Sensores IoT',
+                    drawerIcon: ({ color }) => <DrawerIcon name="hardware-chip-outline" color={color} />,
+                }}
+            />
+
+            <Drawer.Screen
+                name="iot-network/index"
+                options={{
+                    drawerLabel: 'Topologia da Rede',
+                    title: 'Topologia IoT',
+                    drawerIcon: ({ color }) => <DrawerIcon name="git-network-outline" color={color} />,
+                }}
+            />
+
+            <Drawer.Screen
+                name="scanner"
+                options={{
+                    drawerLabel: 'Escanear QR Code',
+                    title: 'Scanner',
+                    drawerIcon: ({ color }) => <DrawerIcon name="qr-code-outline" color={color} />,
+                }}
+            />
+
+            <Drawer.Screen
                 name="profile"
                 options={{
                     drawerLabel: 'Meu Perfil',
@@ -66,12 +110,18 @@ export default function AppLayout() {
                 }}
             />
 
-            {/* Esconda rotas que não devem aparecer no menu lateral */}
+            {/* Rotas de Detalhes ocultas do Drawer */}
             <Drawer.Screen
                 name="calibration-details/[calibrationId]"
-                options={{
-                    drawerItemStyle: { display: 'none' }
-                }}
+                options={{ drawerItemStyle: { display: 'none' } }}
+            />
+            <Drawer.Screen
+                name="stations/[id]"
+                options={{ drawerItemStyle: { display: 'none' } }}
+            />
+            <Drawer.Screen
+                name="iot/[id]"
+                options={{ drawerItemStyle: { display: 'none' } }}
             />
         </Drawer>
     );

@@ -90,7 +90,7 @@ export default function InstrumentDetailsScreen() {
                 <Text style={[styles.sectionTitle, { color: text }]}>Especificações</Text>
                 <View style={[styles.gridContainer, { backgroundColor: cardBg }]}>
                     <DetailItem label="Tipo" value={instrument.instrument_type} icon="construct-outline" color={text} subColor={textSec} />
-                    <DetailItem label="Localização" value={instrument.station.name} icon="location-outline" color={text} subColor={textSec} />
+                    <DetailItem label="Localização" value={instrument.station?.name || instrument.location || 'Sem local'} icon="location-outline" color={text} subColor={textSec} />
                     <DetailItem label="Precisão" value={instrument.precision} icon="scan-outline" color={text} subColor={textSec} />
                     <DetailItem label="Última Calib." value="15/05/2024" icon="calendar-outline" color={text} subColor={textSec} />
                 </View>

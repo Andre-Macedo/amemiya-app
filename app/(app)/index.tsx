@@ -80,17 +80,22 @@ export default function HomeScreen() {
                     <QuickActionButton
                         icon="qr-code-outline"
                         label="Escanear"
-                        onPress={() => console.log("Scan")}
+                        onPress={() => router.push('/scanner' as any)}
                     />
                     <QuickActionButton
-                        icon="add-circle-outline"
-                        label="Novo Instrumento"
-                        onPress={() => console.log("Novo")}
+                        icon="hardware-chip-outline"
+                        label="Sensores IoT"
+                        onPress={() => router.push('/iot' as any)}
                     />
                     <QuickActionButton
-                        icon="search-outline"
-                        label="Buscar"
-                        onPress={() => router.push('/instruments')}
+                        icon="analytics-outline"
+                        label="Checagem"
+                        onPress={() => router.push('/intermediate-check' as any)}
+                    />
+                    <QuickActionButton
+                        icon="business-outline"
+                        label="Máquinas"
+                        onPress={() => router.push('/stations' as any)}
                     />
                 </View>
 

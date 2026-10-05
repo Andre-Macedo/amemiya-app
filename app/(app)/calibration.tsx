@@ -24,6 +24,7 @@ import {useBLE} from '@/hooks/use-ble';
 import {SafeAreaView, useSafeAreaInsets} from "react-native-safe-area-context"; // Importe o hook criado
 import {useReferenceStandards, ReferenceStandard} from '@/hooks/use-reference-standards';
 import {api} from "@/services/api"; // <--- NOVO HOOK
+import {calculateMaxDeviation, calculateMean} from '@/utils/metrology-math';
 
 
 // --- COMPONENTES AUXILIARES ---
@@ -298,6 +299,7 @@ export default function CalibrationScreen() {
     const {data: checklistTemplate, isLoading: loadingForm} = useChecklistDetails(selectedTemplateId || undefined);
 
 
+
     useEffect(() => {
         if (!isConnected) {
             scanAndConnect();
@@ -322,7 +324,7 @@ export default function CalibrationScreen() {
             const kit = kits.find(k => k.id === selectedKitId);
             if (!kit || !kit.children) return;
 
-            const newMapping: Record<string, string> = {};
+            const newMapping: Record<string, number> = {};
 
             checklistTemplate.items.forEach(item => {
                 if (item.question_type === 'numeric') {
@@ -337,7 +339,7 @@ export default function CalibrationScreen() {
                         );
 
                         if (match) {
-                            newMapping[item.id] = match.id;
+                            newMapping[item.id] = Number(match.id);
                         }
                     }
                 }
@@ -383,109 +385,124 @@ export default function CalibrationScreen() {
         }
     };
 
+    const [signatureModalVisible, setSignatureModalVisible] = useState(false);
+    const [signaturePassword, setSignaturePassword] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
     const handleSelectInstrument = (inst: Instrument) => {
         setSelectedInstrument(inst);
-        setSelectedTemplateId(null);
+        if (inst.default_checklist_template?.id) {
+            setSelectedTemplateId(inst.default_checklist_template.id);
+        } else {
+            setSelectedTemplateId(null);
+        }
         setAnswers({});
         setModalVisible(false);
     };
 
-    // const handleBluetoothRead = (itemId: string, readingIndex: number = 0) => {
-    //     if (!isConnected) {
-    //         alert("Bluetooth desconectado! Conectando...");
-    //         scanAndConnect();
-    //         return;
-    //     }
-    //
-    //     // "Arma" o campo para receber o próximo valor do pedal
-    //     setActiveField({ itemId, index: readingIndex });
-    //     // Feedback visual simples (pode melhorar com Toast)
-    //     console.log(`Aguardando pedal para o item ${itemId} index ${readingIndex}...`);
-    // };
-
-    const handleSave = async () => {
+    const handleSave = () => {
         // Validação de ambiente
         if (!envData.temperature || !envData.humidity) {
             Alert.alert("Dados Ambientais", "Por favor preencha temperatura e umidade.");
             return;
         }
 
-        // --- LÓGICA DE FORMATAÇÃO INTELIGENTE ---
+        if (!selectedTemplateId) {
+            Alert.alert("Procedimento", "Por favor selecione o procedimento de calibração.");
+            return;
+        }
+
+        // Abre o modal de Assinatura Eletrônica (ISO 17025 / 21 CFR Part 11)
+        setSignatureModalVisible(true);
+    };
+
+    const handleConfirmSubmit = async () => {
+        if (!signaturePassword) {
+            Alert.alert("Assinatura Eletrônica", "Por favor, digite sua senha de confirmação.");
+            return;
+        }
+
+        setIsSubmitting(true);
+
+        // Calcula desvio máximo real dos pontos medidos
+        let maxDeviationFound = 0;
         const itemsPayload = checklistTemplate?.items.map(item => {
             const rawAnswer = answers[item.id];
-
-            // Objeto base
             const payloadItem: any = {
                 item_id: item.id,
                 readings: null,
+                as_found_readings: null,
+                as_left_readings: null,
                 result: null,
                 notes: null,
                 reference_standard_id: null
             };
 
-            // Se não tiver resposta, manda nulo (ou ignora se preferir)
             if (rawAnswer === undefined || rawAnswer === null) return payloadItem;
 
-            // Formatação baseada no TIPO da pergunta
-            switch (item.question_type) {
-                case 'numeric':
-                    // Para numérico: readings é array, reference_standard_id é obrigatório
-                    payloadItem.readings = Array.isArray(rawAnswer) ? rawAnswer : [rawAnswer];
-                    payloadItem.reference_standard_id = itemStandards[item.id] || null;
-                    break;
+            if (item.question_type === 'numeric') {
+                const numericArray = Array.isArray(rawAnswer) 
+                    ? rawAnswer.map(Number).filter(n => !isNaN(n)) 
+                    : [Number(rawAnswer)];
+                payloadItem.readings = numericArray;
+                payloadItem.as_found_readings = numericArray;
+                payloadItem.reference_standard_id = itemStandards[item.id] || null;
 
-                case 'boolean':
-                    // Para booleano: readings é null, result recebe 'approved'/'rejected'
-                    payloadItem.result = rawAnswer; // Espera-se string 'approved' ou 'rejected'
-                    break;
-
-                case 'text':
-                    // Para texto: readings é null, notes recebe o texto
-                    payloadItem.notes = rawAnswer;
-                    break;
+                const nominal = item.nominal_value || parseFloat(item.step.replace(/[^0-9.]/g, '')) || 0;
+                if (nominal > 0 && numericArray.length > 0) {
+                    const dev = calculateMaxDeviation(numericArray, nominal);
+                    if (Math.abs(dev) > Math.abs(maxDeviationFound)) {
+                        maxDeviationFound = dev;
+                    }
+                }
+            } else if (item.question_type === 'boolean') {
+                payloadItem.result = rawAnswer;
+            } else if (item.question_type === 'text') {
+                payloadItem.notes = rawAnswer;
             }
 
             return payloadItem;
         }) || [];
 
-        // Montagem do Payload Final
         const payload = {
             instrument_id: selectedInstrument?.id,
             checklist_template_id: selectedTemplateId,
             calibration_date: new Date().toISOString().split('T')[0],
             result: finalResult,
+            password: signaturePassword, // CFR 21 Part 11 / ISO 17025
             environment: {
                 temperature: parseFloat(envData.temperature),
                 humidity: parseFloat(envData.humidity)
             },
-            deviation: 0, // Implementar cálculo se desejar
-            uncertainty: 0,
-            notes: notes, // Observações gerais da calibração
-            items: itemsPayload // Array formatado corretamente
+            deviation: maxDeviationFound,
+            uncertainty: 0.005,
+            as_found_deviation: maxDeviationFound,
+            notes: notes,
+            items: itemsPayload
         };
 
         try {
-            // Envia para o backend
             const response = await api.post('/metrology/calibrations', payload);
+            setSignatureModalVisible(false);
+            setSignaturePassword('');
 
-            // Alert.alert("Sucesso", "Calibração finalizada!");
-
-            // O backend deve retornar o ID da calibração criada
             if (response.data && response.data.id) {
-                // Removemos o histórico para o usuário não voltar para o form com 'Back'
                 router.replace({
                     pathname: '/calibration-details/[calibrationId]',
-                    params: {calibrationId: response.data.id}
+                    params: { calibrationId: response.data.id }
                 });
             } else {
-                router.back(); // Fallback
+                router.back();
             }
-
-        } catch (error) {
-            Alert.alert("Erro", "Falha ao enviar calibração.");
+        } catch (error: any) {
+            const msg = error?.response?.data?.message || "Falha ao enviar calibração. Verifique sua senha.";
+            Alert.alert("Erro", msg);
             console.error(error);
+        } finally {
+            setIsSubmitting(false);
         }
     };
+
 
     const filteredStandards = useMemo(() => {
         if (!standardSearch) return allStandards;
@@ -936,6 +953,65 @@ export default function CalibrationScreen() {
                                 </Pressable>
                             )}
                         />
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Modal de Assinatura Eletrônica (ISO 17025 / 21 CFR Part 11) */}
+            <Modal visible={signatureModalVisible} transparent animationType="fade">
+                <View style={{flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', padding: 20}}>
+                    <View style={{backgroundColor: cardBgColor, width: '100%', maxWidth: 400, borderRadius: 16, padding: 24, elevation: 5}}>
+                        <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10}}>
+                            <Ionicons name="finger-print-outline" size={28} color={primary} />
+                            <Text style={{fontSize: 18, fontFamily: Fonts.sansBold, color: text}}>Assinatura Eletrônica</Text>
+                        </View>
+                        <Text style={{fontSize: 13, fontFamily: Fonts.sans, color: textSec, marginBottom: 16}}>
+                            Confirme sua senha de usuário para registrar formalmente a autoria técnica desta calibração (ISO 17025 / 21 CFR Part 11).
+                        </Text>
+
+                        <TextInput
+                            style={{
+                                height: 48,
+                                borderWidth: 1,
+                                borderColor: border,
+                                borderRadius: 10,
+                                paddingHorizontal: 14,
+                                color: text,
+                                backgroundColor: inputBg,
+                                fontSize: 16,
+                                marginBottom: 20
+                            }}
+                            placeholder="Digite sua senha de login..."
+                            placeholderTextColor={textSec}
+                            secureTextEntry
+                            value={signaturePassword}
+                            onChangeText={setSignaturePassword}
+                        />
+
+                        <View style={{flexDirection: 'row', gap: 10}}>
+                            <Pressable
+                                style={{flex: 1, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: border}}
+                                onPress={() => {
+                                    setSignatureModalVisible(false);
+                                    setSignaturePassword('');
+                                }}
+                                disabled={isSubmitting}
+                            >
+                                <Text style={{fontFamily: Fonts.sansSemiBold, color: textSec}}>Cancelar</Text>
+                            </Pressable>
+
+                            <Pressable
+                                style={{flex: 1, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: primary}}
+                                onPress={handleConfirmSubmit}
+                                disabled={isSubmitting}
+                            >
+                                {isSubmitting ? (
+                                    <ActivityIndicator color="#fff" />
+                                ) : (
+                                    <Text style={{fontFamily: Fonts.sansBold, color: '#fff'}}>Assinar e Enviar</Text>
+                                )}
+                            </Pressable>
+                        </View>
                     </View>
                 </View>
             </Modal>
