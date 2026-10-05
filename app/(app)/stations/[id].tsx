@@ -72,9 +72,10 @@ export default function StationDetailScreen() {
                 </Text>
                 {station.machines && station.machines.length > 0 ? (
                     station.machines.map(mach => (
-                        <View
+                        <Pressable
                             key={mach.id}
                             style={[styles.instCard, { backgroundColor: cardBg, borderColor: border }]}
+                            onPress={() => router.push(`/machines/${mach.id}` as any)}
                         >
                             <View style={[styles.machineIconBox, { backgroundColor: primary + '15' }]}>
                                 <Ionicons name="cog-outline" size={20} color={primary} />
@@ -90,7 +91,8 @@ export default function StationDetailScreen() {
                                     {mach.status === 'operational' ? 'Operacional' : mach.status}
                                 </Text>
                             </View>
-                        </View>
+                            <Ionicons name="chevron-forward" size={18} color={textSec} style={{ marginLeft: 6 }} />
+                        </Pressable>
                     ))
                 ) : (
                     <Text style={[styles.emptySection, { color: textSec }]}>

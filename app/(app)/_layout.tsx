@@ -123,6 +123,10 @@ export default function AppLayout() {
                 name="iot/[id]"
                 options={{ drawerItemStyle: { display: 'none' } }}
             />
+            <Drawer.Screen
+                name="machines/[id]"
+                options={{ drawerItemStyle: { display: 'none' } }}
+            />
         </Drawer>
     );
 }

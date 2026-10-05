@@ -20,28 +20,57 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
     const primary = useThemeColor({}, 'primary');
     const border = useThemeColor({}, 'border');
 
+    const formatTimeLabel = (pt: any, idx: number) => {
+        if (idx % 4 !== 0) return '';
+        const raw = pt?.timestamp || pt?.measured_at || pt?.created_at;
+        if (!raw || typeof raw !== 'string') return '';
+        if (raw.includes('T')) {
+            return raw.split('T')[1]?.substring(0, 5) ?? '';
+        }
+        if (raw.includes(' ')) {
+            return raw.split(' ')[1]?.substring(0, 5) ?? '';
+        }
+        return '';
+    };
+
     // Prepara dados para o gráfico de Temperatura & Umidade
-    const tempData = history.map((pt, idx) => ({
-        value: pt.temperature ?? 20,
-        label: idx % 4 === 0 ? pt.timestamp.split('T')[1]?.substring(0, 5) ?? '' : '',
-        dataPointText: `${pt.temperature ?? 20}`,
-    }));
+    const tempData = history.map((pt: any, idx) => {
+        const val = Number(pt.temperature ?? pt.features?.temperature ?? 20);
+        return {
+            value: isNaN(val) ? 20 : val,
+            label: formatTimeLabel(pt, idx),
+            dataPointText: `${isNaN(val) ? 20 : val}`,
+        };
+    });
 
-    const vibrationData = history.map((pt, idx) => ({
-        value: pt.vibration_rms ?? 0,
-        label: idx % 4 === 0 ? pt.timestamp.split('T')[1]?.substring(0, 5) ?? '' : '',
-    }));
+    const vibrationData = history.map((pt: any, idx) => {
+        const val = Number(pt.vibration_rms ?? pt.rms_global ?? 0);
+        return {
+            value: isNaN(val) ? 0 : val,
+            label: formatTimeLabel(pt, idx),
+        };
+    });
 
-    const mlData = history.map((pt, idx) => ({
-        value: (pt.ml_anomaly_score ?? 0) * 100,
-        label: idx % 4 === 0 ? pt.timestamp.split('T')[1]?.substring(0, 5) ?? '' : '',
-    }));
+    const mlData = history.map((pt: any, idx) => {
+        let score = 5;
+        if (typeof pt.ml_anomaly_score === 'number') {
+            score = pt.ml_anomaly_score * 100;
+        } else if (pt.ml_status === 'anomaly') {
+            score = 85;
+        } else if (typeof pt.ml_confidence === 'number') {
+            score = (1 - pt.ml_confidence) * 100;
+        }
+        return {
+            value: isNaN(score) ? 5 : Math.round(score),
+            label: formatTimeLabel(pt, idx),
+        };
+    });
 
     // Dados triaxiais (X, Y, Z) para o BarChart agrupado
-    const triaxialData = history.slice(-6).flatMap(pt => [
-        { value: pt.accel_x ?? 0.5, spacing: 2, label: 'X', frontColor: '#007AFF' },
-        { value: pt.accel_y ?? 0.8, spacing: 2, label: 'Y', frontColor: '#34C759' },
-        { value: pt.accel_z ?? 0.3, spacing: 16, label: 'Z', frontColor: '#FF9500' },
+    const triaxialData = history.slice(-6).flatMap((pt: any) => [
+        { value: Number(pt.accel_x ?? pt.rms_x ?? 0.5), spacing: 2, label: 'X', frontColor: '#007AFF' },
+        { value: Number(pt.accel_y ?? pt.rms_y ?? 0.8), spacing: 2, label: 'Y', frontColor: '#34C759' },
+        { value: Number(pt.accel_z ?? pt.rms_z ?? 0.3), spacing: 16, label: 'Z', frontColor: '#FF9500' },
     ]);
 
     return (
