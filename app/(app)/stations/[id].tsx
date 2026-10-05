@@ -66,27 +66,41 @@ export default function StationDetailScreen() {
                     </View>
                 </View>
 
-                {/* Seção: Sensores IoT Instalados */}
+                {/* Seção: Máquinas Industriais Alocadas */}
                 <Text style={[styles.sectionTitle, { color: text }]}>
-                    Sensores IoT Instalados ({station.nodes?.length ?? 0})
+                    Máquinas Industriais ({station.machines?.length ?? 0})
                 </Text>
-                {station.nodes && station.nodes.length > 0 ? (
-                    station.nodes.map(node => (
-                        <SensorIhmCard
-                            key={node.id}
-                            node={node}
-                            onPress={() => router.push(`/iot/${node.id}` as any)}
-                        />
+                {station.machines && station.machines.length > 0 ? (
+                    station.machines.map(mach => (
+                        <View
+                            key={mach.id}
+                            style={[styles.instCard, { backgroundColor: cardBg, borderColor: border }]}
+                        >
+                            <View style={[styles.machineIconBox, { backgroundColor: primary + '15' }]}>
+                                <Ionicons name="cog-outline" size={20} color={primary} />
+                            </View>
+                            <View style={{ flex: 1, marginLeft: 12 }}>
+                                <Text style={[styles.instName, { color: text }]}>{mach.name}</Text>
+                                <Text style={[styles.instSerial, { color: textSec }]}>
+                                    Cód: {mach.code || 'S/N'} {mach.description ? `• ${mach.description}` : ''}
+                                </Text>
+                            </View>
+                            <View style={[styles.statusPill, { backgroundColor: (mach.status === 'operational' ? '#34C759' : '#FF9500') + '15' }]}>
+                                <Text style={[styles.statusPillText, { color: mach.status === 'operational' ? '#34C759' : '#FF9500' }]}>
+                                    {mach.status === 'operational' ? 'Operacional' : mach.status}
+                                </Text>
+                            </View>
+                        </View>
                     ))
                 ) : (
                     <Text style={[styles.emptySection, { color: textSec }]}>
-                        Nenhum sensor IoT vinculado a esta máquina.
+                        Nenhuma máquina industrial vinculada a este posto.
                     </Text>
                 )}
 
                 {/* Seção: Instrumentos Alocados */}
                 <Text style={[styles.sectionTitle, { color: text, marginTop: 24 }]}>
-                    Instrumentos na Máquina ({station.instruments?.length ?? 0})
+                    Instrumentos no Posto ({station.instruments?.length ?? 0})
                 </Text>
                 {station.instruments && station.instruments.length > 0 ? (
                     station.instruments.map(inst => (
@@ -95,7 +109,10 @@ export default function StationDetailScreen() {
                             style={[styles.instCard, { backgroundColor: cardBg, borderColor: border }]}
                             onPress={() => router.push(`/instruments/${inst.id}`)}
                         >
-                            <View style={{ flex: 1 }}>
+                            <View style={[styles.machineIconBox, { backgroundColor: '#FF950015' }]}>
+                                <Ionicons name="construct-outline" size={18} color="#FF9500" />
+                            </View>
+                            <View style={{ flex: 1, marginLeft: 12 }}>
                                 <Text style={[styles.instName, { color: text }]}>{inst.name}</Text>
                                 <Text style={[styles.instSerial, { color: textSec }]}>
                                     Nº: {inst.stock_number || inst.serial_number} • {inst.instrument_type}
@@ -107,6 +124,24 @@ export default function StationDetailScreen() {
                 ) : (
                     <Text style={[styles.emptySection, { color: textSec }]}>
                         Nenhum instrumento alocado nesta estação.
+                    </Text>
+                )}
+
+                {/* Seção: Sensores IoT Instalados */}
+                <Text style={[styles.sectionTitle, { color: text, marginTop: 24 }]}>
+                    Sensores IoT & Telemetria ({station.nodes?.length ?? 0})
+                </Text>
+                {station.nodes && station.nodes.length > 0 ? (
+                    station.nodes.map(node => (
+                        <SensorIhmCard
+                            key={node.id}
+                            node={node}
+                            onPress={() => router.push(`/iot/${node.id}` as any)}
+                        />
+                    ))
+                ) : (
+                    <Text style={[styles.emptySection, { color: textSec }]}>
+                        Nenhum sensor IoT vinculado a este posto.
                     </Text>
                 )}
             </ScrollView>
@@ -171,6 +206,23 @@ const styles = StyleSheet.create({
         padding: 14,
         marginBottom: 10,
         borderWidth: 1,
+    },
+    machineIconBox: {
+        width: 36,
+        height: 36,
+        borderRadius: 8,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    statusPill: {
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+    },
+    statusPillText: {
+        fontFamily: Fonts.sansSemiBold,
+        fontSize: 11,
+        textTransform: 'capitalize',
     },
     instName: {
         fontFamily: Fonts.sansSemiBold,

@@ -68,8 +68,8 @@ export default function AppLayout() {
             <Drawer.Screen
                 name="stations/index"
                 options={{
-                    drawerLabel: 'Máquinas & Células',
-                    title: 'Máquinas',
+                    drawerLabel: 'Postos & Células',
+                    title: 'Postos de Trabalho',
                     drawerIcon: ({ color }) => <DrawerIcon name="business-outline" color={color} />,
                 }}
             />

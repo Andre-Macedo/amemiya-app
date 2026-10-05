@@ -22,7 +22,7 @@ export default function StationsListScreen() {
     return (
         <View style={{ flex: 1, backgroundColor: bg }}>
             <Stack.Screen options={{ headerShown: false }} />
-            <ScreenHeader title="Máquinas & Estações" />
+            <ScreenHeader title="Postos de Trabalho & Células" />
 
             {isLoading ? (
                 <View style={styles.center}>
@@ -55,6 +55,12 @@ export default function StationsListScreen() {
 
                             <View style={styles.statsRow}>
                                 <View style={styles.statItem}>
+                                    <Ionicons name="cog-outline" size={14} color={textSec} />
+                                    <Text style={[styles.statText, { color: textSec }]}>
+                                        {item.machines_count ?? 0} máquinas
+                                    </Text>
+                                </View>
+                                <View style={styles.statItem}>
                                     <Ionicons name="construct-outline" size={14} color={textSec} />
                                     <Text style={[styles.statText, { color: textSec }]}>
                                         {item.instruments_count ?? 0} instrumentos
@@ -63,7 +69,7 @@ export default function StationsListScreen() {
                                 <View style={styles.statItem}>
                                     <Ionicons name="hardware-chip-outline" size={14} color={textSec} />
                                     <Text style={[styles.statText, { color: textSec }]}>
-                                        {item.sensors_count ?? 0} sensores IoT
+                                        {item.sensors_count ?? 0} IoT
                                     </Text>
                                 </View>
                             </View>
@@ -71,7 +77,7 @@ export default function StationsListScreen() {
                     )}
                     ListEmptyComponent={
                         <Text style={[styles.empty, { color: textSec }]}>
-                            Nenhuma estação ou máquina encontrada.
+                            Nenhum posto de trabalho ou célula cadastrado.
                         </Text>
                     }
                 />

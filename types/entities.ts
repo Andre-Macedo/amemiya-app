@@ -24,6 +24,15 @@ export type Calibration = {
     certificate_hash?: string;
 };
 
+export type Machine = {
+    id: string;
+    name: string;
+    code?: string;
+    description?: string;
+    status: 'operational' | 'maintenance' | 'offline' | string;
+    metadata?: Record<string, any>;
+};
+
 export type Station = {
     id: string;
     name: string;
@@ -31,8 +40,13 @@ export type Station = {
     location: string;
     type?: string;
     description?: string;
+    is_active?: boolean;
+    machines_count?: number;
     instruments_count?: number;
     sensors_count?: number;
+    machines?: Machine[];
+    instruments?: Instrument[];
+    nodes?: IoTNode[];
 };
 
 export type InstrumentStatusType = 'active' | 'expired' | 'in_calibration' | 'maintenance' | 'rejected';

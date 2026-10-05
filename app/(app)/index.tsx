@@ -228,7 +228,7 @@ export default function HomeScreen() {
                     />
                     <QuickActionButton
                         icon="business-outline"
-                        label="Máquinas"
+                        label="Postos"
                         onPress={() => router.push('/stations' as any)}
                     />
                 </View>
