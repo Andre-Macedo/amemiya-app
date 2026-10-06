@@ -1,7 +1,7 @@
 // app/(app)/calibration-details/[id].tsx
 
 import React from 'react';
-import {View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Linking} from 'react-native';
+import {View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Linking, Platform} from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -87,23 +87,45 @@ export default function CalibrationDetailsScreen() {
         iconName = 'time';
     }
 
-    const handleDownload = async () => {
-        if (!calibration) return;
+    const [isDownloading, setIsDownloading] = React.useState(false);
 
-        const baseUrl = api.defaults.baseURL || '';
-        const downloadUrl = `${baseUrl}/calibrations/${calibration.id}/pdf`;
+    const handleDownload = async () => {
+        if (!calibration || isDownloading) return;
 
         try {
-            const supported = await Linking.canOpenURL(downloadUrl);
+            setIsDownloading(true);
+            const response = await api.get(`/calibrations/${calibration.id}/pdf`, {
+                responseType: 'blob',
+            });
 
-            if (supported) {
-                await Linking.openURL(downloadUrl);
+            const filename = `Certificado_${calibration.id}.pdf`;
+
+            if (Platform.OS === 'web') {
+                const blob = new Blob([response.data], { type: 'application/pdf' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
             } else {
-                alert(`Não é possível abrir este link: ${downloadUrl}`);
+                // No mobile (iOS/Android)
+                const reader = new FileReader();
+                reader.readAsDataURL(response.data);
+                reader.onloadend = async () => {
+                    const base64data = reader.result as string;
+                    if (base64data) {
+                        await Linking.openURL(base64data);
+                    }
+                };
             }
         } catch (error) {
-            console.error("Erro ao abrir PDF:", error);
-            alert('Erro ao tentar baixar o certificado.');
+            console.error("Erro ao baixar certificado PDF:", error);
+            alert('Não foi possível baixar o certificado PDF. Verifique sua conexão e tente novamente.');
+        } finally {
+            setIsDownloading(false);
         }
     };
 
@@ -151,12 +173,19 @@ export default function CalibrationDetailsScreen() {
                 <Pressable
                     style={({ pressed }) => [
                         styles.downloadButton,
-                        { backgroundColor: primary, opacity: pressed ? 0.8 : 1 }
+                        { backgroundColor: primary, opacity: pressed || isDownloading ? 0.8 : 1 }
                     ]}
                     onPress={handleDownload}
+                    disabled={isDownloading}
                 >
-                    <Ionicons name="document-text-outline" size={24} color="#FFF" />
-                    <Text style={styles.downloadText}>Baixar Certificado PDF</Text>
+                    {isDownloading ? (
+                        <ActivityIndicator color="#FFF" />
+                    ) : (
+                        <>
+                            <Ionicons name="document-text-outline" size={24} color="#FFF" />
+                            <Text style={styles.downloadText}>Baixar Certificado PDF</Text>
+                        </>
+                    )}
                 </Pressable>
             </View>
         </View>
