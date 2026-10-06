@@ -136,6 +136,10 @@ export default function AppLayout() {
                 name="machines/[id]"
                 options={{ drawerItemStyle: { display: 'none' } }}
             />
+            <Drawer.Screen
+                name="machines/[id]/hmi"
+                options={{ drawerItemStyle: { display: 'none' } }}
+            />
         </Drawer>
     );
 }

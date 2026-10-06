@@ -7,7 +7,6 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
 import { useMachineDetails } from '@/hooks/use-machines';
 import { SensorIhmCard } from '@/components/iot/sensor-ihm-card';
-import { MachineHmiPanel } from '@/components/iot/machine-hmi-panel';
 
 export default function MachineDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -51,23 +50,32 @@ export default function MachineDetailScreen() {
             <ScreenHeader title={machine.name} showBack />
 
             <ScrollView contentContainerStyle={styles.container}>
-                {/* Painel IHM Físico (Design LCD 3.5" - 480x320) */}
-                <View style={{ marginBottom: 20 }}>
-                    <View style={styles.ihmHeaderRow}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                            <Ionicons name="tv-outline" size={18} color={primary} />
-                            <Text style={[styles.sectionTitle, { color: text, marginBottom: 0 }]}>
-                                Painel IHM Operacional (LCD 3.5")
+                {/* Card de Acesso ao Terminal IHM Operacional (Tela Cheia / LCD 3.5") */}
+                <Pressable
+                    style={[styles.hmiBannerCard, { borderColor: '#00E67644' }]}
+                    onPress={() => router.push(`/machines/${machine.id}/hmi` as any)}
+                >
+                    <View style={styles.hmiBannerLeft}>
+                        <View style={styles.hmiIconContainer}>
+                            <Ionicons name="tv-outline" size={24} color="#00E676" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <Text style={styles.hmiBannerTitle}>Terminal IHM Operacional</Text>
+                                <View style={styles.hmiResolutionPill}>
+                                    <Text style={styles.hmiResolutionText}>LCD 3.5"</Text>
+                                </View>
+                            </View>
+                            <Text style={styles.hmiBannerSubtitle}>
+                                Monitoramento dinâmico: ISO 20816, Tacômetro Real e Sonda Acústica
                             </Text>
                         </View>
                     </View>
-                    <View style={{ marginTop: 10 }}>
-                        <MachineHmiPanel
-                            machine={machine}
-                            nodes={machine.nodes || []}
-                        />
+                    <View style={styles.hmiOpenButton}>
+                        <Text style={styles.hmiOpenButtonText}>Abrir IHM</Text>
+                        <Ionicons name="arrow-forward" size={14} color="#00E676" />
                     </View>
-                </View>
+                </Pressable>
 
                 {/* Header Card da Máquina */}
                 <View style={[styles.infoCard, { backgroundColor: cardBg, borderColor: border }]}>
@@ -250,11 +258,68 @@ const styles = StyleSheet.create({
         marginTop: 14,
         lineHeight: 18,
     },
-    ihmHeaderRow: {
+    hmiBannerCard: {
+        backgroundColor: '#0F1622',
+        borderRadius: 14,
+        padding: 16,
+        marginBottom: 20,
+        borderWidth: 1.5,
+        elevation: 3,
+        shadowColor: '#00E676',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.15,
+        shadowRadius: 6,
+    },
+    hmiBannerLeft: {
         flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 6,
+        gap: 12,
+    },
+    hmiIconContainer: {
+        width: 44,
+        height: 44,
+        borderRadius: 10,
+        backgroundColor: '#00E67618',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    hmiBannerTitle: {
+        color: '#FFFFFF',
+        fontFamily: Fonts.sansBold,
+        fontSize: 15,
+    },
+    hmiResolutionPill: {
+        backgroundColor: '#1E2C42',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 4,
+    },
+    hmiResolutionText: {
+        color: '#00E676',
+        fontFamily: Fonts.sansSemiBold,
+        fontSize: 10,
+    },
+    hmiBannerSubtitle: {
+        color: '#90A4AE',
+        fontFamily: Fonts.sans,
+        fontSize: 12,
+        marginTop: 3,
+        lineHeight: 16,
+    },
+    hmiOpenButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 6,
+        marginTop: 12,
+        paddingTop: 10,
+        borderTopWidth: 1,
+        borderTopColor: '#1A2332',
+    },
+    hmiOpenButtonText: {
+        color: '#00E676',
+        fontFamily: Fonts.sansBold,
+        fontSize: 13,
     },
     sectionTitle: {
         fontFamily: Fonts.sansSemiBold,
