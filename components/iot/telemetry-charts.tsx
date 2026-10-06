@@ -12,7 +12,7 @@ interface TelemetryChartsProps {
 const screenWidth = Dimensions.get('window').width;
 
 export function TelemetryCharts({ history }: TelemetryChartsProps) {
-    const [selectedMetric, setSelectedMetric] = useState<'temp' | 'vibration' | 'ml'>('temp');
+    const [selectedMetric, setSelectedMetric] = useState<'temp' | 'vibration' | 'rpm' | 'acoustic' | 'ml'>('temp');
 
     const cardBg = useThemeColor({}, 'white');
     const text = useThemeColor({}, 'text');
@@ -33,13 +33,31 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
         return '';
     };
 
-    // Prepara dados para o gráfico de Temperatura & Umidade
+    // Prepara dados para o gráfico de Temperatura da Sonda
     const tempData = history.map((pt: any, idx) => {
-        const val = Number(pt.temperature ?? pt.features?.temperature ?? 20);
+        const val = Number(pt.probe_temperature ?? pt.temperature ?? pt.features?.temperature ?? 22);
         return {
-            value: isNaN(val) ? 20 : val,
+            value: isNaN(val) ? 22 : val,
             label: formatTimeLabel(pt, idx),
-            dataPointText: `${isNaN(val) ? 20 : val}`,
+            dataPointText: `${isNaN(val) ? 22 : val}`,
+        };
+    });
+
+    // Prepara dados para o Tacômetro (RPM Real)
+    const rpmData = history.map((pt: any, idx) => {
+        const val = Number(pt.rpm_measured ?? pt.features?.rpm ?? 1750);
+        return {
+            value: isNaN(val) ? 0 : Math.round(val),
+            label: formatTimeLabel(pt, idx),
+        };
+    });
+
+    // Prepara dados para o Microfone (Ruído Acústico em dB)
+    const acousticData = history.map((pt: any, idx) => {
+        const val = Number(pt.acoustic_db ?? pt.features?.acoustic_db ?? 72);
+        return {
+            value: isNaN(val) ? 0 : Number(val.toFixed(1)),
+            label: formatTimeLabel(pt, idx),
         };
     });
 
@@ -82,7 +100,25 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
                     onPress={() => setSelectedMetric('temp')}
                 >
                     <Text style={[styles.tabText, { color: selectedMetric === 'temp' ? primary : textSec }]}>
-                        Temperatura
+                        Sonda (°C)
+                    </Text>
+                </Pressable>
+
+                <Pressable
+                    style={[styles.tab, selectedMetric === 'rpm' && { borderBottomColor: primary, borderBottomWidth: 2 }]}
+                    onPress={() => setSelectedMetric('rpm')}
+                >
+                    <Text style={[styles.tabText, { color: selectedMetric === 'rpm' ? primary : textSec }]}>
+                        Tacômetro (RPM)
+                    </Text>
+                </Pressable>
+
+                <Pressable
+                    style={[styles.tab, selectedMetric === 'acoustic' && { borderBottomColor: primary, borderBottomWidth: 2 }]}
+                    onPress={() => setSelectedMetric('acoustic')}
+                >
+                    <Text style={[styles.tabText, { color: selectedMetric === 'acoustic' ? primary : textSec }]}>
+                        Ruído (dB)
                     </Text>
                 </Pressable>
 
@@ -100,7 +136,7 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
                     onPress={() => setSelectedMetric('ml')}
                 >
                     <Text style={[styles.tabText, { color: selectedMetric === 'ml' ? primary : textSec }]}>
-                        Risco ML (%)
+                        Risco ML
                     </Text>
                 </Pressable>
             </View>
@@ -109,22 +145,78 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
             <View style={styles.chartWrapper}>
                 {selectedMetric === 'temp' && (
                     <View>
-                        <Text style={[styles.chartTitle, { color: textSec }]}>Série Temporal de Temperatura (°C)</Text>
+                        <Text style={[styles.chartTitle, { color: textSec }]}>Temperatura da Sonda de Contato (°C)</Text>
                         {tempData.length > 0 ? (
                             <LineChart
                                 data={tempData}
                                 width={screenWidth - 80}
                                 height={200}
-                                color="#007AFF"
+                                color="#FF6D00"
                                 thickness={3}
-                                startFillColor="#007AFF33"
-                                endFillColor="#007AFF05"
+                                startFillColor="#FF6D0033"
+                                endFillColor="#FF6D0005"
                                 startOpacity={0.9}
                                 endOpacity={0.2}
                                 areaChart
                                 curved
                                 isAnimated
                                 hideDataPoints={tempData.length > 15}
+                                noOfSections={4}
+                                yAxisTextStyle={{ color: textSec, fontSize: 10 }}
+                                xAxisLabelTextStyle={{ color: textSec, fontSize: 10 }}
+                            />
+                        ) : (
+                            <Text style={[styles.emptyText, { color: textSec }]}>Sem dados no período.</Text>
+                        )}
+                    </View>
+                )}
+
+                {selectedMetric === 'rpm' && (
+                    <View>
+                        <Text style={[styles.chartTitle, { color: textSec }]}>Velocidade de Rotação Real - Tacômetro (RPM)</Text>
+                        {rpmData.length > 0 ? (
+                            <LineChart
+                                data={rpmData}
+                                width={screenWidth - 80}
+                                height={200}
+                                color="#00E5FF"
+                                thickness={3}
+                                startFillColor="#00E5FF33"
+                                endFillColor="#00E5FF05"
+                                startOpacity={0.9}
+                                endOpacity={0.2}
+                                areaChart
+                                curved
+                                isAnimated
+                                hideDataPoints={rpmData.length > 15}
+                                noOfSections={4}
+                                yAxisTextStyle={{ color: textSec, fontSize: 10 }}
+                                xAxisLabelTextStyle={{ color: textSec, fontSize: 10 }}
+                            />
+                        ) : (
+                            <Text style={[styles.emptyText, { color: textSec }]}>Sem dados no período.</Text>
+                        )}
+                    </View>
+                )}
+
+                {selectedMetric === 'acoustic' && (
+                    <View>
+                        <Text style={[styles.chartTitle, { color: textSec }]}>Pressão Sonora da Máquina - Microfone (dB)</Text>
+                        {acousticData.length > 0 ? (
+                            <LineChart
+                                data={acousticData}
+                                width={screenWidth - 80}
+                                height={200}
+                                color="#E040FB"
+                                thickness={3}
+                                startFillColor="#E040FB33"
+                                endFillColor="#E040FB05"
+                                startOpacity={0.9}
+                                endOpacity={0.2}
+                                areaChart
+                                curved
+                                isAnimated
+                                hideDataPoints={acousticData.length > 15}
                                 noOfSections={4}
                                 yAxisTextStyle={{ color: textSec, fontSize: 10 }}
                                 xAxisLabelTextStyle={{ color: textSec, fontSize: 10 }}

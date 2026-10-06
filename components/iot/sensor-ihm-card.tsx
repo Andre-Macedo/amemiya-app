@@ -59,19 +59,28 @@ export function SensorIhmCard({ node, onPress }: SensorIhmCardProps) {
                 </View>
             </View>
 
-            {/* Grid de Leituras Ambientais e Mecânicas */}
+            {/* Grid de Leituras Físicas da Sonda da Máquina */}
             <View style={styles.grid}>
                 <View style={[styles.cell, { backgroundColor: border + '33' }]}>
-                    <Text style={[styles.cellLabel, { color: textSec }]}>Temperatura</Text>
+                    <Text style={[styles.cellLabel, { color: textSec }]}>Sonda Térmica</Text>
                     <Text style={[styles.cellValue, { color: text }]}>
-                        {tel?.temperature !== undefined ? `${tel.temperature.toFixed(1)} °C` : '--'}
+                        {tel?.temperature !== undefined || tel?.probe_temperature !== undefined
+                            ? `${(tel.probe_temperature ?? tel.temperature)!.toFixed(1)} °C`
+                            : '--'}
                     </Text>
                 </View>
 
                 <View style={[styles.cell, { backgroundColor: border + '33' }]}>
-                    <Text style={[styles.cellLabel, { color: textSec }]}>Umidade</Text>
-                    <Text style={[styles.cellValue, { color: text }]}>
-                        {tel?.humidity !== undefined ? `${tel.humidity.toFixed(1)} %` : '--'}
+                    <Text style={[styles.cellLabel, { color: textSec }]}>Tacômetro Real</Text>
+                    <Text style={[styles.cellValue, { color: '#00B0FF' }]}>
+                        {tel?.rpm_measured !== undefined ? `${Math.round(tel.rpm_measured)} RPM` : '--'}
+                    </Text>
+                </View>
+
+                <View style={[styles.cell, { backgroundColor: border + '33' }]}>
+                    <Text style={[styles.cellLabel, { color: textSec }]}>Microfone Acústico</Text>
+                    <Text style={[styles.cellValue, { color: '#E040FB' }]}>
+                        {tel?.acoustic_db !== undefined ? `${tel.acoustic_db.toFixed(1)} dB` : '--'}
                     </Text>
                 </View>
 

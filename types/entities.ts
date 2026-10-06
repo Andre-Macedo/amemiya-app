@@ -140,8 +140,11 @@ export interface IoTNode {
     station_id?: string;
     last_seen_at?: string;
     latest_telemetry?: {
-        temperature?: number;
-        humidity?: number;
+        temperature?: number; // Temperatura da sonda no contato com a máquina
+        probe_temperature?: number;
+        rpm_measured?: number; // Rotação real aferida pelo tacômetro
+        acoustic_db?: number; // Nível acústico aferido pelo microfone (dB)
+        acoustic_peak_freq?: number; // Frequência acústica de pico (Hz)
         pressure?: number;
         vibration_rms?: number;
         iso20816_severity?: ISO20816Severity;
@@ -163,7 +166,9 @@ export interface IoTGateway {
 export interface IoTHistoryPoint {
     timestamp: string;
     temperature?: number;
-    humidity?: number;
+    probe_temperature?: number;
+    rpm_measured?: number;
+    acoustic_db?: number;
     vibration_rms?: number;
     accel_x?: number;
     accel_y?: number;

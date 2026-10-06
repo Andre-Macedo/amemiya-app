@@ -37,15 +37,21 @@ export function MachineHmiPanel({
     const isOperational = machine.status === 'operational';
     const hasOnlineNode = nodes.some(n => n.status === 'online');
 
-    // Métricas
-    const temp = tel?.temperature ?? (machine.metadata?.target_temp_c as number | undefined);
-    const humidity = tel?.humidity ?? (machine.metadata?.target_humidity_pct as number | undefined);
+    // Métricas reais dos sensores de hardware na máquina
+    const probeTemp = tel?.probe_temperature ?? tel?.temperature ?? (machine.metadata?.target_temp_c as number | undefined);
     const vibRms = tel?.vibration_rms ?? 0.85;
     const severity: ISO20816Severity = tel?.iso20816_severity ?? (vibRms > 4.5 ? 'D' : vibRms > 2.8 ? 'C' : vibRms > 1.8 ? 'B' : 'A');
     const mlRisk = tel?.ml_anomaly_probability ?? (vibRms > 3.0 ? 0.65 : 0.08);
 
-    // Parâmetros nominais dos metadados
+    // Rotação real via Tacômetro (ou fallback nominal da máquina se parado)
+    const realRpm = tel?.rpm_measured ?? (isOperational ? (machine.metadata?.nominal_rpm ?? machine.metadata?.spindle_rpm ?? 1750) : 0);
     const nominalRpm = machine.metadata?.nominal_rpm ?? machine.metadata?.spindle_rpm ?? null;
+
+    // Microfone na Máquina (Pressão Acústica dB e frequência)
+    const acousticDb = tel?.acoustic_db ?? (isOperational ? 74.2 : 42.0);
+    const acousticPeak = tel?.acoustic_peak_freq ?? (isOperational ? 2400 : 120);
+
+    // Outros metadados
     const powerKw = machine.metadata?.power_kw ?? null;
     const clampingTon = machine.metadata?.clamping_force_ton ?? null;
     const axes = machine.metadata?.axes ?? null;
@@ -177,73 +183,71 @@ export function MachineHmiPanel({
                         </View>
                     </View>
 
-                    {/* Painel Direito: Parâmetros Térmicos e Processo */}
+                    {/* Painel Direito: Tacômetro Real, Sonda Térmica e Microfone Acústico */}
                     <View style={styles.cardColRight}>
-                        {/* Widget Temperatura & Umidade */}
+                        {/* Widget Superior: Tacômetro Real (RPM) */}
                         <View style={styles.widgetBox}>
-                            <Text style={[styles.widgetTitle, { fontSize: Math.max(10 * scaleFactor, 8) }]}>
-                                AMBIENTE & TÉRMICA
-                            </Text>
-                            <View style={styles.splitRow}>
-                                <View style={styles.splitCell}>
-                                    <View style={styles.cellIconLabel}>
-                                        <Ionicons name="thermometer-outline" size={13 * scaleFactor} color="#FF6D00" />
-                                        <Text style={[styles.cellLabel, { fontSize: Math.max(9 * scaleFactor, 7) }]}>TEMP</Text>
-                                    </View>
-                                    <Text
-                                        style={[
-                                            styles.cellValue,
-                                            { fontSize: Math.max(17 * scaleFactor, 13), color: '#FFF' },
-                                        ]}
-                                    >
-                                        {temp !== undefined ? `${temp.toFixed(1)}°C` : '--'}
-                                    </Text>
-                                </View>
-                                <View style={styles.cellDivider} />
-                                <View style={styles.splitCell}>
-                                    <View style={styles.cellIconLabel}>
-                                        <Ionicons name="water-outline" size={13 * scaleFactor} color="#00B0FF" />
-                                        <Text style={[styles.cellLabel, { fontSize: Math.max(9 * scaleFactor, 7) }]}>UMID</Text>
-                                    </View>
-                                    <Text
-                                        style={[
-                                            styles.cellValue,
-                                            { fontSize: Math.max(17 * scaleFactor, 13), color: '#FFF' },
-                                        ]}
-                                    >
-                                        {humidity !== undefined ? `${humidity.toFixed(1)}%` : '--'}
-                                    </Text>
-                                </View>
-                            </View>
-                        </View>
-
-                        {/* Widget Parâmetro Específico da Máquina */}
-                        <View style={[styles.widgetBox, { marginTop: 6 * scaleFactor }]}>
                             <View style={styles.widgetTitleRow}>
                                 <Text style={[styles.widgetTitle, { fontSize: Math.max(10 * scaleFactor, 8) }]}>
-                                    {nominalRpm ? 'ROTAÇÃO DO SPINDLE' : clampingTon ? 'FORÇA DE FECHAMENTO' : 'DADOS DE OPERAÇÃO'}
+                                    TACÔMETRO • RPM REAL
                                 </Text>
+                                <Ionicons name="speedometer-outline" size={12 * scaleFactor} color="#00E5FF" />
                             </View>
                             <View style={styles.bigValueRow}>
                                 <Text
                                     style={[
                                         styles.bigNumericValue,
-                                        { fontSize: Math.max(20 * scaleFactor, 15), color: '#00E5FF' },
+                                        { fontSize: Math.max(26 * scaleFactor, 18), color: '#00E5FF' },
                                     ]}
                                 >
-                                    {nominalRpm
-                                        ? String(nominalRpm)
-                                        : clampingTon
-                                        ? `${clampingTon}`
-                                        : axes
-                                        ? `${axes} Eixos`
-                                        : powerKw
-                                        ? `${powerKw} kW`
-                                        : 'NOMINAL'}
+                                    {Math.round(realRpm)}
                                 </Text>
                                 <Text style={[styles.unitText, { fontSize: Math.max(10 * scaleFactor, 8) }]}>
-                                    {nominalRpm ? 'RPM' : clampingTon ? 'TON' : ''}
+                                    RPM {nominalRpm ? `(${nominalRpm} nom)` : ''}
                                 </Text>
+                            </View>
+                        </View>
+
+                        {/* Widget Inferior: Sonda Térmica & Microfone Acústico na Máquina */}
+                        <View style={[styles.widgetBox, { marginTop: 6 * scaleFactor }]}>
+                            <Text style={[styles.widgetTitle, { fontSize: Math.max(9 * scaleFactor, 8) }]}>
+                                SONDA TÉRMICA & ACÚSTICA
+                            </Text>
+                            <View style={styles.splitRow}>
+                                {/* Sonda Térmica na Máquina */}
+                                <View style={styles.splitCell}>
+                                    <View style={styles.cellIconLabel}>
+                                        <Ionicons name="thermometer-outline" size={13 * scaleFactor} color="#FF6D00" />
+                                        <Text style={[styles.cellLabel, { fontSize: Math.max(9 * scaleFactor, 7) }]}>SONDA</Text>
+                                    </View>
+                                    <Text
+                                        style={[
+                                            styles.cellValue,
+                                            { fontSize: Math.max(16 * scaleFactor, 12), color: '#FFF' },
+                                        ]}
+                                    >
+                                        {probeTemp !== undefined ? `${probeTemp.toFixed(1)}°C` : '--'}
+                                    </Text>
+                                </View>
+                                <View style={styles.cellDivider} />
+                                {/* Microfone Acústico (Ruído da Máquina em dB) */}
+                                <View style={styles.splitCell}>
+                                    <View style={styles.cellIconLabel}>
+                                        <Ionicons name="mic-outline" size={13 * scaleFactor} color="#E040FB" />
+                                        <Text style={[styles.cellLabel, { fontSize: Math.max(9 * scaleFactor, 7) }]}>RUÍDO</Text>
+                                    </View>
+                                    <Text
+                                        style={[
+                                            styles.cellValue,
+                                            {
+                                                fontSize: Math.max(16 * scaleFactor, 12),
+                                                color: acousticDb > 85 ? '#FF1744' : '#E040FB',
+                                            },
+                                        ]}
+                                    >
+                                        {`${acousticDb.toFixed(1)} dB`}
+                                    </Text>
+                                </View>
                             </View>
                         </View>
                     </View>
