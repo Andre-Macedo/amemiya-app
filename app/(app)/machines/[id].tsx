@@ -7,6 +7,7 @@ import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
 import { useMachineDetails } from '@/hooks/use-machines';
 import { SensorIhmCard } from '@/components/iot/sensor-ihm-card';
+import { MachineHmiPanel } from '@/components/iot/machine-hmi-panel';
 
 export default function MachineDetailScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
@@ -50,6 +51,24 @@ export default function MachineDetailScreen() {
             <ScreenHeader title={machine.name} showBack />
 
             <ScrollView contentContainerStyle={styles.container}>
+                {/* Painel IHM Físico (Design LCD 3.5" - 480x320) */}
+                <View style={{ marginBottom: 20 }}>
+                    <View style={styles.ihmHeaderRow}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                            <Ionicons name="tv-outline" size={18} color={primary} />
+                            <Text style={[styles.sectionTitle, { color: text, marginBottom: 0 }]}>
+                                Painel IHM Operacional (LCD 3.5")
+                            </Text>
+                        </View>
+                    </View>
+                    <View style={{ marginTop: 10 }}>
+                        <MachineHmiPanel
+                            machine={machine}
+                            nodes={machine.nodes || []}
+                        />
+                    </View>
+                </View>
+
                 {/* Header Card da Máquina */}
                 <View style={[styles.infoCard, { backgroundColor: cardBg, borderColor: border }]}>
                     <View style={styles.headerRow}>
@@ -230,6 +249,12 @@ const styles = StyleSheet.create({
         fontSize: 13,
         marginTop: 14,
         lineHeight: 18,
+    },
+    ihmHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 6,
     },
     sectionTitle: {
         fontFamily: Fonts.sansSemiBold,

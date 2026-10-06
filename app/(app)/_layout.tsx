@@ -75,6 +75,15 @@ export default function AppLayout() {
             />
 
             <Drawer.Screen
+                name="machines/index"
+                options={{
+                    drawerLabel: 'Máquinas & IHM',
+                    title: 'Máquinas & IHM',
+                    drawerIcon: ({ color }) => <DrawerIcon name="tv-outline" color={color} />,
+                }}
+            />
+
+            <Drawer.Screen
                 name="iot/index"
                 options={{
                     drawerLabel: 'Sensores IoT & IHM',
