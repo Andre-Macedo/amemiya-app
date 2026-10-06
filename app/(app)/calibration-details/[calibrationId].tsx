@@ -51,6 +51,8 @@ export default function CalibrationDetailsScreen() {
     const danger = useThemeColor({}, 'danger');
     const warning = useThemeColor({}, 'warning');
 
+    const [isDownloading, setIsDownloading] = React.useState(false);
+
     if (isLoading) {
         return (
             <View style={[styles.container, { backgroundColor: bg, justifyContent: 'center', alignItems: 'center' }]}>
@@ -86,8 +88,6 @@ export default function CalibrationDetailsScreen() {
         statusColor = warning;
         iconName = 'time';
     }
-
-    const [isDownloading, setIsDownloading] = React.useState(false);
 
     const handleDownload = async () => {
         if (!calibration || isDownloading) return;
