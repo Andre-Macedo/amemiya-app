@@ -279,7 +279,7 @@ export function MachineHmiPanel({
 
                     <View style={styles.resolutionBadge}>
                         <Text style={[styles.resolutionText, { fontSize: Math.max(9 * scaleFactor, 7) }]}>
-                            3.5" LCD • 480×320
+                            {'3.5" LCD • 480×320'}
                         </Text>
                     </View>
                 </View>

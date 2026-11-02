@@ -63,7 +63,7 @@ export default function MachineDetailScreen() {
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                                 <Text style={styles.hmiBannerTitle}>Terminal IHM Operacional</Text>
                                 <View style={styles.hmiResolutionPill}>
-                                    <Text style={styles.hmiResolutionText}>LCD 3.5"</Text>
+                                    <Text style={styles.hmiResolutionText}>{'LCD 3.5"'}</Text>
                                 </View>
                             </View>
                             <Text style={styles.hmiBannerSubtitle}>

@@ -91,7 +91,7 @@ export default function MachinesListScreen() {
                                     >
                                         <Ionicons name="tv-outline" size={16} color="#00E676" />
                                         <Text style={styles.actionHmiText}>
-                                            Terminal IHM (3.5")
+                                            {'Terminal IHM (3.5")'}
                                         </Text>
                                     </Pressable>
                                 </View>

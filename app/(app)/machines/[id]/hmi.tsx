@@ -62,7 +62,7 @@ export default function MachineHmiDedicatedScreen() {
                         IHM • {machine.name}
                     </Text>
                     <Text style={styles.navSub}>
-                        Terminal Industrial 3.5" (480×320)
+                        {'Terminal Industrial 3.5" (480×320)'}
                     </Text>
                 </View>
 
@@ -121,7 +121,7 @@ export default function MachineHmiDedicatedScreen() {
                     <View style={styles.diagRow}>
                         <Text style={styles.diagLabel}>Alvo de Hardware Físico:</Text>
                         <Text style={styles.diagVal}>
-                            ESP32 + LCD SPI/RGB 3.5" (ILI9488 / ST7796)
+                            {'ESP32 + LCD SPI/RGB 3.5" (ILI9488 / ST7796)'}
                         </Text>
                     </View>
                 </View>
