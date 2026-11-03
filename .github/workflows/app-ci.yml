@@ -1,0 +1,34 @@
+name: Amemiya Mobile App CI
+
+on:
+  push:
+    branches: [ master, develop ]
+  pull_request:
+    branches: [ master, develop ]
+
+jobs:
+  quality-gate:
+    name: Code Quality & Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: TypeScript Typecheck
+        run: npx tsc --noEmit
+
+      - name: ESLint Verification
+        run: npm run lint
+
+      - name: Run Jest Unit Tests
+        run: npm test
