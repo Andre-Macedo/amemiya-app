@@ -15,7 +15,8 @@ import {
 } from '@expo-google-fonts/inter';
 
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
-import {SafeAreaProvider, SafeAreaView} from "react-native-safe-area-context";
+import {SafeAreaProvider} from "react-native-safe-area-context";
+import {OfflineBanner} from "@/components/offline-banner";
 
 
 const queryClient = new QueryClient();
@@ -57,6 +58,7 @@ function RootLayoutNav() {
 
     return (
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+            <OfflineBanner />
             <Stack>
                 <Stack.Screen name="(app)" options={{headerShown: false}}/>
                 <Stack.Screen name="(auth)" options={{headerShown: false}}/>

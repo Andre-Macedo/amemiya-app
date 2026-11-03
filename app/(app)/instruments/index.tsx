@@ -3,8 +3,7 @@ import { StyleSheet, FlatList, View, TextInput, TouchableOpacity, Text, Pressabl
 import { Stack } from 'expo-router';
 import { DrawerToggleButton } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context';
 
 import InstrumentCard from '@/components/instrument-card';
 import { useThemeColor } from '@/hooks/use-theme-color';
@@ -14,7 +13,8 @@ import { useInstruments } from '@/hooks/use-instruments';
 
 // Import helpers para status e cores
 import { getStatusColor, STATUS_LABELS } from '@/utils/status-helper';
-import { InstrumentStatusType } from '@/types/entities';
+import { Instrument, InstrumentStatusType } from '@/types/entities';
+import { cacheInstruments, getCachedInstruments } from '@/services/offline-sync';
 
 // Tipo do filtro agora usa os valores reais do banco ('active', 'expired'...)
 type FilterType = 'Todos' | InstrumentStatusType;
@@ -62,6 +62,20 @@ export default function InstrumentsScreen() {
             return !duplicate; // Só retorna se não vimos este ID ainda
         });
     }, [data]);
+
+    const [offlineInstruments, setOfflineInstruments] = useState<Instrument[]>([]);
+
+    useEffect(() => {
+        if (instruments.length > 0) {
+            cacheInstruments(instruments);
+        } else {
+            getCachedInstruments().then(cached => {
+                if (cached.length > 0) setOfflineInstruments(cached);
+            });
+        }
+    }, [instruments]);
+
+    const displayedInstruments = instruments.length > 0 ? instruments : offlineInstruments;
 
     // Componente de Chip de Filtro
     const FilterChip = ({ label, value }: { label: string, value: FilterType }) => {
@@ -138,7 +152,7 @@ export default function InstrumentsScreen() {
 
             {/* Lista de Instrumentos */}
             <FlatList
-                data={instruments}
+                data={displayedInstruments}
                 keyExtractor={(item) => item.id.toString()}
                 renderItem={({ item }) => <InstrumentCard item={item} />}
                 contentContainerStyle={[styles.listContainer, { paddingBottom: 100 + insets.bottom }]} // Padding seguro no fim da lista
