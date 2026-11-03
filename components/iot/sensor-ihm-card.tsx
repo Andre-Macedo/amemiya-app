@@ -30,7 +30,6 @@ export function SensorIhmCard({ node, onPress }: SensorIhmCardProps) {
     const text = useThemeColor({}, 'text');
     const textSec = useThemeColor({}, 'textSecondary');
     const border = useThemeColor({}, 'border');
-    const primary = useThemeColor({}, 'primary');
 
     const tel = node.latest_telemetry;
     const isoInfo = getIso20816Color(tel?.iso20816_severity);

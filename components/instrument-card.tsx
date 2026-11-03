@@ -1,10 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { Link, useRouter } from 'expo-router';
+import { Link } from 'expo-router';
 import { Instrument } from '@/types/entities';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
-import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Ionicons } from "@expo/vector-icons";
 
 const getStatusThemeKey = (status: any): 'success' | 'danger' | 'warning' | 'textSecondary' => {
@@ -32,24 +31,12 @@ interface InstrumentCardProps {
 }
 
 const InstrumentCard: React.FC<InstrumentCardProps> = ({ item }) => {
-    const router = useRouter();
-
     const titleColor = useThemeColor({}, 'text');
     const detailColor = useThemeColor({}, 'textSecondary');
-    const detailBoldColor = useThemeColor({}, 'text');
 
     const statusThemeKey = getStatusThemeKey(item.status);
     const statusBadgeColor = useThemeColor({}, statusThemeKey);
-
-    const theme = useColorScheme() ?? 'light';
     const cardBg = useThemeColor({}, 'white');
-
-    const handleCalibrate = () => {
-        router.push({
-            pathname: '/calibration',
-            params: { preselectedInstrumentId: item.id }
-        } as any);
-    };
 
     return (
         <Link href={`/instruments/${item.id}`} asChild>

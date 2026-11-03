@@ -15,7 +15,6 @@ export function TelemetryCharts({ history }: TelemetryChartsProps) {
     const [selectedMetric, setSelectedMetric] = useState<'temp' | 'vibration' | 'rpm' | 'acoustic' | 'ml'>('temp');
 
     const cardBg = useThemeColor({}, 'white');
-    const text = useThemeColor({}, 'text');
     const textSec = useThemeColor({}, 'textSecondary');
     const primary = useThemeColor({}, 'primary');
     const border = useThemeColor({}, 'border');

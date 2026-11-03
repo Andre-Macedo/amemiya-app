@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, FlatList, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, ActivityIndicator, Pressable } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenHeader } from '@/components/screen-header';
@@ -62,13 +62,17 @@ export default function IoTNetworkTopologyScreen() {
                                     <View style={styles.nodesSection}>
                                         <Text style={[styles.nodesSectionTitle, { color: textSec }]}>Nós Conectados:</Text>
                                         {item.nodes.map(node => (
-                                            <View key={node.id} style={styles.nodeRow}>
+                                            <Pressable
+                                                key={node.id}
+                                                style={styles.nodeRow}
+                                                onPress={() => router.push(`/iot/${node.id}` as any)}
+                                            >
                                                 <Ionicons name="git-commit-outline" size={16} color={primary} />
                                                 <Text style={[styles.nodeName, { color: text }]}>{node.name}</Text>
                                                 <Text style={[styles.nodeRssi, { color: textSec }]}>
                                                     {node.battery_level ? `${node.battery_level}% bat` : ''} {node.rssi ? `• ${node.rssi} dBm` : ''}
                                                 </Text>
-                                            </View>
+                                            </Pressable>
                                         ))}
                                     </View>
                                 )}

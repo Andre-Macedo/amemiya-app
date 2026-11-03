@@ -1,20 +1,18 @@
 import React from 'react';
-import {View, Text, StyleSheet, ScrollView, Pressable, useColorScheme, ActivityIndicator} from 'react-native';
+import {View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator} from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { DUMMY_INSTRUMENTS } from '@/data/dummyData';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
 import { ScreenHeader } from '@/components/screen-header';
 import {useInstrument} from "@/hooks/use-instruments";
-import {useSafeAreaInsets} from "react-native-safe-area-context"; // Importe o novo header
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 
 export default function InstrumentDetailsScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
 
     const insets = useSafeAreaInsets();
-    const theme = useColorScheme() ?? 'light';
 
     // Busca o instrumento real pelo ID
     const { data: instrument, isLoading, error } = useInstrument(id);

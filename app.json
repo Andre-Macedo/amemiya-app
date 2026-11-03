@@ -47,13 +47,11 @@
           "modes": [
             "central"
           ],
-          "bluetoothAlwaysPermission": "Permitir acesso ao Bluetooth para conectar ao paquímetro.",
-          "bluetoothPeripheralPermission": "Permitir acesso ao Bluetooth para conectar ao paquímetro."
+          "bluetoothAlwaysPermission": "Permitir acesso ao Bluetooth para conectar ao paquímetro."
         }
       ],
       "expo-font",
-      "expo-secure-store",
-      "react-native-ble-plx"
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

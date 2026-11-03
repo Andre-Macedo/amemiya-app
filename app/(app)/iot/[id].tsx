@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable } from 'react-native';
 import { useLocalSearchParams, Stack } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import { ScreenHeader } from '@/components/screen-header';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
@@ -14,7 +13,6 @@ export default function IoTNodeDetailScreen() {
     const [period, setPeriod] = useState<'1h' | '6h' | '24h' | '7d'>('24h');
 
     const bg = useThemeColor({}, 'background');
-    const text = useThemeColor({}, 'text');
     const textSec = useThemeColor({}, 'textSecondary');
     const primary = useThemeColor({}, 'primary');
     const cardBg = useThemeColor({}, 'white');

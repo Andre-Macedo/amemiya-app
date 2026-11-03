@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, useWindowDimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, RefreshControl } from 'react-native';
 import { useLocalSearchParams, Stack, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenHeader } from '@/components/screen-header';
@@ -11,18 +11,13 @@ import { MachineHmiPanel } from '@/components/iot/machine-hmi-panel';
 export default function MachineHmiDedicatedScreen() {
     const { id } = useLocalSearchParams<{ id: string }>();
     const router = useRouter();
-    const { width, height } = useWindowDimensions();
 
     const [isFullscreenView, setIsFullscreenView] = useState(false);
 
     const bg = useThemeColor({}, 'background');
-    const cardBg = useThemeColor({}, 'white');
-    const text = useThemeColor({}, 'text');
     const textSec = useThemeColor({}, 'textSecondary');
-    const primary = useThemeColor({}, 'primary');
-    const border = useThemeColor({}, 'border');
 
-    const { data: machine, isLoading, refetch } = useMachineDetails(id);
+    const { data: machine, isLoading, refetch, isRefetching } = useMachineDetails(id);
 
     if (isLoading) {
         return (
@@ -78,7 +73,10 @@ export default function MachineHmiDedicatedScreen() {
                 </Pressable>
             </View>
 
-            <ScrollView contentContainerStyle={styles.container}>
+            <ScrollView
+                contentContainerStyle={styles.container}
+                refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#00E676" />}
+            >
                 {/* Visualizador do Display Físico 3.5" */}
                 <View style={styles.panelContainer}>
                     <MachineHmiPanel

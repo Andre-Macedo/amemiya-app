@@ -1,13 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { useAuth } from '@/context/AuthContext';
 import { useThemeColor } from '@/hooks/use-theme-color';
 import { Fonts } from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
-import { DrawerToggleButton } from '@react-navigation/drawer';
-import { Stack } from 'expo-router';
 import { ScreenHeader } from '@/components/screen-header';
-import {SafeAreaView} from "react-native-safe-area-context";
 
 export default function ProfileScreen() {
     const { user, logout } = useAuth();
