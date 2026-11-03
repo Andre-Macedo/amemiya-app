@@ -1,7 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, Dimensions, useWindowDimensions } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Text, StyleSheet, useWindowDimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Machine, IoTNode, ISO20816Severity } from '@/types/entities';
+import * as Haptics from 'expo-haptics';
 
 // Resolução e proporção de referência para LCD 3.5" (ex: ILI9488 / ST7796 / WT32-SC01 Plus)
 export const LCD_35_WIDTH = 480;
@@ -47,18 +48,19 @@ export function MachineHmiPanel({
     const realRpm = tel?.rpm_measured ?? (isOperational ? (machine.metadata?.nominal_rpm ?? machine.metadata?.spindle_rpm ?? 1750) : 0);
     const nominalRpm = machine.metadata?.nominal_rpm ?? machine.metadata?.spindle_rpm ?? null;
 
-    // Microfone na Máquina (Pressão Acústica dB e frequência)
+    // Microfone na Máquina (Pressão Acústica dB)
     const acousticDb = tel?.acoustic_db ?? (isOperational ? 74.2 : 42.0);
-    const acousticPeak = tel?.acoustic_peak_freq ?? (isOperational ? 2400 : 120);
-
-    // Outros metadados
-    const powerKw = machine.metadata?.power_kw ?? null;
-    const clampingTon = machine.metadata?.clamping_force_ton ?? null;
-    const axes = machine.metadata?.axes ?? null;
 
     // Cálculo da barra ISO 20816 (escala de 0 a 7.1 mm/s)
     const maxVibScale = 7.1;
     const vibProgressPct = Math.min(Math.max((vibRms / maxVibScale) * 100, 2), 100);
+
+    // Alerta háptico sonoro industrial em caso de vibração crítica em Zona D (ISO 20816-3)
+    useEffect(() => {
+        if (severity === 'D') {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+        }
+    }, [severity]);
 
     return (
         <View

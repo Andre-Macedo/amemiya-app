@@ -61,6 +61,7 @@ export type Instrument = {
     station?: Station;
     location?: string;
     precision?: string;
+    mpe?: number;
     resolution?: number;
     range_min?: number;
     range_max?: number;

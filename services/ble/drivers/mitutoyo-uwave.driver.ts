@@ -37,8 +37,10 @@ export const MitutoyoUWaveDriver: BleDeviceDriver = {
             const rawText = atob(base64Value).trim();
             if (!rawText) return null;
 
-            // Formato típico Digimatic Mitutoyo U-WAVE: "01+00025.40" ou "D1+025.40"
-            const match = rawText.match(/[+-]?\d+\.?\d*/);
+            // Formato típico Digimatic Mitutoyo U-WAVE: "01+00025.40", "D1+025.40" ou "+025.40"
+            // Procura primariamente pelo bloco com sinal [+-] correspondente à cota medida
+            const signedMatch = rawText.match(/[+-]\d+\.?\d*/);
+            const match = signedMatch || rawText.match(/\d+\.?\d*$/) || rawText.match(/[+-]?\d+\.?\d*/);
             if (!match) return null;
 
             const numericValue = parseFloat(match[0]);

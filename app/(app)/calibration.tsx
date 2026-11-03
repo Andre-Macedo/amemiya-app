@@ -1,4 +1,4 @@
-import React, {useState, useEffect, useMemo} from 'react';
+import React, {useState, useEffect, useMemo, useCallback} from 'react';
 import {
     View,
     Text,
@@ -21,10 +21,13 @@ import {useInstruments} from '@/hooks/use-instruments';
 import {useAvailableChecklists, useChecklistDetails} from '@/hooks/use-calibration';
 import {Instrument, ChecklistItem} from '@/types/entities';
 import {useBLE} from '@/hooks/use-ble';
-import {SafeAreaView, useSafeAreaInsets} from "react-native-safe-area-context"; // Importe o hook criado
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 import {useReferenceStandards, ReferenceStandard} from '@/hooks/use-reference-standards';
-import {api} from "@/services/api"; // <--- NOVO HOOK
-import {calculateMaxDeviation, calculateMean} from '@/utils/metrology-math';
+import {api} from "@/services/api";
+import {enqueueOutbox} from '@/services/offline-sync';
+import {calculateMaxDeviation} from '@/utils/metrology-math';
+import * as LocalAuthentication from 'expo-local-authentication';
+import * as Haptics from 'expo-haptics';
 
 
 // --- COMPONENTES AUXILIARES ---
@@ -136,22 +139,21 @@ interface DynamicInputProps {
 
     selectedStandardName?: string; // Nome do padrão selecionado (se houver)
     onPressStandard: () => void;   // Ação para abrir o modal de seleção
+    mpe?: number;                  // Erro Máximo Admissível (Tolerância)
 }
 
 
-// 2. Componente de Input Dinâmico (Agora com suporte a múltiplas leituras)
+// 2. Componente de Input Dinâmico (Agora com suporte a múltiplas leituras e feedback háptico MPE)
 const DynamicInput =
     ({
          item, onChange, value, onFocusField,
-         standards = [], selectedStandardId, onStandardChange,
-         selectedStandardName, onPressStandard
+         selectedStandardName, onPressStandard, mpe = 0.02
      }: DynamicInputProps) => {
         const text = useThemeColor({}, 'text');
         const textSec = useThemeColor({}, 'textSecondary');
         const inputBg = useThemeColor({}, 'secondary');
         const primary = useThemeColor({}, 'primary');
         const border = useThemeColor({}, 'border');
-        const cardBg = useThemeColor({}, 'white');
         const readings = Array.isArray(value) ? value : (value ? [value] : Array(item.required_readings).fill(''));
 
         const handleReadingChange = (textVal: string, index: number) => {
@@ -165,6 +167,7 @@ const DynamicInput =
             const validNums = readings.map(Number).filter((n: number) => !isNaN(n) && n !== 0);
             const currentMean = validNums.length > 0 ? validNums.reduce((a: number, b: number) => a + b, 0) / validNums.length : null;
             const currentDev = (currentMean !== null && nominal > 0) ? (currentMean - nominal) : null;
+            const isOutOfTolerance = currentDev !== null && Math.abs(currentDev) > mpe;
 
             return (
                 <View style={styles.inputGroup}>
@@ -197,14 +200,30 @@ const DynamicInput =
                                 </Text>
                             )}
 
-                            <View style={[styles.inputContainer, {backgroundColor: inputBg, flex: 1}]}>
+                            <View
+                                style={[
+                                    styles.inputContainer,
+                                    {
+                                        backgroundColor: isOutOfTolerance ? '#FF3B3012' : inputBg,
+                                        borderColor: isOutOfTolerance ? '#FF3B30' : 'transparent',
+                                        borderWidth: isOutOfTolerance ? 1 : 0,
+                                        flex: 1
+                                    }
+                                ]}
+                            >
                                 <TextInput
-                                    style={[styles.input, {color: text}]}
+                                    style={[styles.input, {color: isOutOfTolerance ? '#FF3B30' : text}]}
                                     placeholder="0.00"
                                     placeholderTextColor={textSec}
                                     keyboardType="numeric"
                                     value={readings[index] || ''}
-                                    onChangeText={(val) => handleReadingChange(val, index)}
+                                    onChangeText={(val) => {
+                                        handleReadingChange(val, index);
+                                        const num = parseFloat(val);
+                                        if (!isNaN(num) && nominal > 0 && Math.abs(num - nominal) > mpe) {
+                                            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+                                        }
+                                    }}
                                     onFocus={() => onFocusField(index)}
                                 />
                             </View>
@@ -218,9 +237,9 @@ const DynamicInput =
                             <Text style={{
                                 fontSize: 12,
                                 fontWeight: 'bold',
-                                color: Math.abs(currentDev) <= 0.02 ? '#34C759' : '#FF3B30'
+                                color: isOutOfTolerance ? '#FF3B30' : '#34C759'
                             }}>
-                                Desvio: {currentDev > 0 ? '+' : ''}{currentDev.toFixed(3)} mm
+                                Desvio: {currentDev > 0 ? '+' : ''}{currentDev.toFixed(3)} mm {isOutOfTolerance ? `(> MPE ±${mpe})` : '✓ OK'}
                             </Text>
                         </View>
                     )}
@@ -305,8 +324,8 @@ export default function CalibrationScreen() {
     const [finalResult, setFinalResult] = useState<'approved' | 'rejected' | 'approved_with_restrictions'>('approved');
     const [notes, setNotes] = useState('');
 
-    const {kits, allStandards, isLoading} = useReferenceStandards();
-    const {scanAndConnect, connectionStatus, lastValue, isConnected} = useBLE();
+    const {kits, allStandards} = useReferenceStandards();
+    const {scanAndConnect, connectionStatus, lastValue, isConnected, batteryLevel} = useBLE();
 
     const [modalVisible, setModalVisible] = useState(false);
     const [focusedField, setFocusedField] = useState<{ itemId: string, index: number } | null>(null);
@@ -314,19 +333,35 @@ export default function CalibrationScreen() {
 
     const [standardSearch, setStandardSearch] = useState('');
 
-
     const insets = useSafeAreaInsets();
 
     const {data: availableChecklists, isLoading: loadingList} = useAvailableChecklists(selectedInstrument?.id);
     const {data: checklistTemplate, isLoading: loadingForm} = useChecklistDetails(selectedTemplateId || undefined);
 
-
+    // Função auxiliar para atualizar resposta (com suporte a As-Found e As-Left)
+    const handleUpdateAnswer = useCallback((itemId: string, index: number, val: string) => {
+        if (hasAdjustment && activePhase === 'as_left') {
+            setAsLeftAnswers(prev => {
+                const currentVal = prev[itemId] || [];
+                const readingsArray = Array.isArray(currentVal) ? [...currentVal] : [];
+                readingsArray[index] = val;
+                return {...prev, [itemId]: readingsArray};
+            });
+        } else {
+            setAnswers(prev => {
+                const currentVal = prev[itemId] || [];
+                const readingsArray = Array.isArray(currentVal) ? [...currentVal] : [];
+                readingsArray[index] = val;
+                return {...prev, [itemId]: readingsArray};
+            });
+        }
+    }, [hasAdjustment, activePhase]);
 
     useEffect(() => {
         if (!isConnected) {
             scanAndConnect();
         }
-    }, []);
+    }, [isConnected, scanAndConnect]);
 
     // Quando o pedal envia um valor (lastValue muda)
     useEffect(() => {
@@ -336,7 +371,7 @@ export default function CalibrationScreen() {
             // Atualiza a resposta no campo focado automaticamente
             handleUpdateAnswer(focusedField.itemId, focusedField.index, lastValue);
         }
-    }, [lastValue]);
+    }, [lastValue, focusedField, handleUpdateAnswer]);
 
     useEffect(() => {
         if (selectedKitId && checklistTemplate && kits) {
@@ -378,26 +413,6 @@ export default function CalibrationScreen() {
 
     // Helper para achar o kit selecionado
     const selectedKit = useMemo(() => kits?.find(k => k.id === selectedKitId), [kits, selectedKitId]);
-
-    // Função auxiliar para atualizar resposta (com suporte a As-Found e As-Left)
-    const handleUpdateAnswer = (itemId: string, index: number, val: string) => {
-        if (hasAdjustment && activePhase === 'as_left') {
-            setAsLeftAnswers(prev => {
-                const currentVal = prev[itemId] || [];
-                const readingsArray = Array.isArray(currentVal) ? [...currentVal] : [];
-                readingsArray[index] = val;
-                return {...prev, [itemId]: readingsArray};
-            });
-        } else {
-            setAnswers(prev => {
-                const currentVal = prev[itemId] || [];
-                const readingsArray = Array.isArray(currentVal) ? [...currentVal] : [];
-                readingsArray[index] = val;
-                return {...prev, [itemId]: readingsArray};
-            });
-        }
-    };
-
 
     const handleManualStandardSelect = (standardId: number) => {
         if (selectingStandardForId) {
@@ -443,12 +458,7 @@ export default function CalibrationScreen() {
         setSignatureModalVisible(true);
     };
 
-    const handleConfirmSubmit = async () => {
-        if (!signaturePassword) {
-            Alert.alert("Assinatura Eletrônica", "Por favor, digite sua senha de confirmação.");
-            return;
-        }
-
+    const executeSubmitWithAuth = async (authSecret: string) => {
         setIsSubmitting(true);
 
         let maxFoundDev = 0;
@@ -514,7 +524,7 @@ export default function CalibrationScreen() {
             checklist_template_id: selectedTemplateId,
             calibration_date: new Date().toISOString().split('T')[0],
             result: finalResult,
-            password: signaturePassword, // CFR 21 Part 11 / ISO 17025
+            password: authSecret, // CFR 21 Part 11 / ISO 17025
             environment: {
                 temperature: parseFloat(envData.temperature),
                 humidity: parseFloat(envData.humidity)
@@ -541,11 +551,64 @@ export default function CalibrationScreen() {
                 router.back();
             }
         } catch (error: any) {
-            const msg = error?.response?.data?.message || "Falha ao enviar calibração. Verifique sua senha.";
+            // Se for falha de rede/offline, enfileira na outbox local
+            if (!error?.response || error?.code === 'ERR_NETWORK' || error?.message?.includes('Network')) {
+                await enqueueOutbox({
+                    type: 'calibration',
+                    endpoint: '/metrology/calibrations',
+                    payload: payload,
+                });
+                setSignatureModalVisible(false);
+                setSignaturePassword('');
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                Alert.alert(
+                    "Salvo no Modo Offline",
+                    "Sem conexão com a rede da fábrica. A calibração foi gravada localmente com segurança e será sincronizada automaticamente quando a rede retornar.",
+                    [{ text: "OK", onPress: () => router.back() }]
+                );
+                return;
+            }
+
+            const msg = error?.response?.data?.message || "Falha ao enviar calibração. Verifique sua autenticação.";
             Alert.alert("Erro", msg);
             console.error(error);
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleConfirmSubmit = () => {
+        if (!signaturePassword) {
+            Alert.alert("Assinatura Eletrônica", "Por favor, digite sua senha de confirmação.");
+            return;
+        }
+        executeSubmitWithAuth(signaturePassword);
+    };
+
+    const handleBiometricSignature = async () => {
+        try {
+            const hasHardware = await LocalAuthentication.hasHardwareAsync();
+            const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+            if (!hasHardware || !isEnrolled) {
+                Alert.alert(
+                    "Biometria Indisponível",
+                    "Seu dispositivo não possui biometria cadastrada. Use a senha para assinar."
+                );
+                return;
+            }
+
+            const result = await LocalAuthentication.authenticateAsync({
+                promptMessage: "Assinatura Eletrônica (21 CFR Part 11)",
+                cancelLabel: "Cancelar",
+                fallbackLabel: "Usar Senha",
+            });
+
+            if (result.success) {
+                await executeSubmitWithAuth("BIOMETRIC_CFR21_SIGNATURE");
+            }
+        } catch {
+            Alert.alert("Erro de Autenticação", "Não foi possível validar a biometria.");
         }
     };
 
@@ -574,8 +637,29 @@ export default function CalibrationScreen() {
                 rightColor={isConnected ? "#007AFF" : "#999"}
             />
 
-            {/* Barra de Status (Só aparece se estiver desconectado ou escaneando para dar feedback) */}
-            {!isConnected && (
+            {/* Barra de Status BLE com Indicador de Bateria do Instrumento */}
+            {isConnected ? (
+                <View style={{backgroundColor: '#34C75918', paddingVertical: 6, paddingHorizontal: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center'}}>
+                    <View style={{flexDirection: 'row', alignItems: 'center', gap: 6}}>
+                        <Ionicons name="bluetooth" size={14} color="#34C759" />
+                        <Text style={{color: '#34C759', fontSize: 12, fontFamily: Fonts.sansSemiBold}}>
+                            Hardware BLE Conectado
+                        </Text>
+                    </View>
+                    {batteryLevel !== null && (
+                        <View style={{flexDirection: 'row', alignItems: 'center', gap: 4}}>
+                            <Ionicons
+                                name={batteryLevel > 20 ? 'battery-charging' : 'battery-dead'}
+                                size={14}
+                                color={batteryLevel > 20 ? '#34C759' : '#FF3B30'}
+                            />
+                            <Text style={{color: '#34C759', fontSize: 12, fontFamily: Fonts.sansSemiBold}}>
+                                {batteryLevel}%
+                            </Text>
+                        </View>
+                    )}
+                </View>
+            ) : (
                 <View style={{backgroundColor: '#FF950022', padding: 8, alignItems: 'center'}}>
                     <Text style={{color: '#FF9500', fontSize: 12}}>
                         Status Bluetooth: {connectionStatus} (Toque no ícone para conectar)
@@ -667,8 +751,8 @@ export default function CalibrationScreen() {
                             >
                                 <View style={{flex: 1}}>
                                     <Text style={[styles.selectorValue, {color: selectedKitId ? text : textSec}]}>
-                                        {selectedKitId
-                                            ? kits?.find(k => k.id === selectedKitId)?.name
+                                        {selectedKit
+                                            ? selectedKit.name
                                             : 'Toque para selecionar um kit...'}
                                     </Text>
                                 </View>
@@ -789,6 +873,7 @@ export default function CalibrationScreen() {
                                             onFocusField={(index) => setFocusedField({itemId: item.id, index})}
                                             selectedStandardName={stdName}
                                             onPressStandard={() => setSelectingStandardForId(item.id)}
+                                            mpe={selectedInstrument?.mpe ?? 0.02}
                                         />
                                     );
                                 })}
@@ -1105,6 +1190,34 @@ export default function CalibrationScreen() {
                         <Text style={{fontSize: 13, fontFamily: Fonts.sans, color: textSec, marginBottom: 16}}>
                             Confirme sua senha de usuário para registrar formalmente a autoria técnica desta calibração (ISO 17025 / 21 CFR Part 11).
                         </Text>
+
+                        <Pressable
+                            style={{
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                backgroundColor: primary + '18',
+                                borderWidth: 1,
+                                borderColor: primary,
+                                borderRadius: 10,
+                                height: 48,
+                                marginBottom: 14,
+                                gap: 8,
+                            }}
+                            onPress={handleBiometricSignature}
+                            disabled={isSubmitting}
+                        >
+                            <Ionicons name="finger-print" size={22} color={primary} />
+                            <Text style={{ fontFamily: Fonts.sansBold, color: primary, fontSize: 14 }}>
+                                Assinar com Biometria
+                            </Text>
+                        </Pressable>
+
+                        <View style={{flexDirection: 'row', alignItems: 'center', marginBottom: 12}}>
+                            <View style={{flex: 1, height: 1, backgroundColor: border}} />
+                            <Text style={{marginHorizontal: 10, fontSize: 11, color: textSec}}>ou use sua senha</Text>
+                            <View style={{flex: 1, height: 1, backgroundColor: border}} />
+                        </View>
 
                         <TextInput
                             style={{
