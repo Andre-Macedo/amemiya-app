@@ -111,6 +111,15 @@ export default function AppLayout() {
             />
 
             <Drawer.Screen
+                name="ble-devices"
+                options={{
+                    drawerLabel: 'Dispositivos BLE',
+                    title: 'Dispositivos BLE',
+                    drawerIcon: ({ color }) => <DrawerIcon name="bluetooth-outline" color={color} />,
+                }}
+            />
+
+            <Drawer.Screen
                 name="profile"
                 options={{
                     drawerLabel: 'Meu Perfil',

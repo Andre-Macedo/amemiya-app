@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { BleManager, Device, Subscription } from 'react-native-ble-plx';
 import * as Haptics from 'expo-haptics';
+import { toByteArray } from 'react-native-quick-base64';
 
 import {
     BleConnectionStatus,
@@ -30,6 +31,8 @@ export function useBLE() {
     const [activeDriver, setActiveDriver] = useState<BleDeviceDriver>(NordicUartDriver);
     const [scannedDevices, setScannedDevices] = useState<Device[]>([]);
     const [pairedDevices, setPairedDevices] = useState<PairedBleDevice[]>([]);
+    const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
+    const [isScanning, setIsScanning] = useState(false);
 
     // Carrega dispositivos pareados no início
     useEffect(() => {
@@ -60,41 +63,7 @@ export function useBLE() {
         return true;
     }, []);
 
-    // 2. Conectar a um dispositivo usando um Driver específico
-    const connectToDevice = useCallback(async (targetDevice: Device, driver: BleDeviceDriver) => {
-        try {
-            setConnectionStatus('Conectando...');
-            const connectedDevice = await targetDevice.connect();
-            setDevice(connectedDevice);
-            setActiveDriver(driver);
-
-            await connectedDevice.discoverAllServicesAndCharacteristics();
-            setConnectionStatus('Conectado');
-
-            // Salva na lista de pareados para reconexão rápida
-            await savePairedBleDevice({
-                id: connectedDevice.id,
-                name: connectedDevice.name || 'Dispositivo Metrológico',
-                driverId: driver.id,
-                customServiceUuid: driver.serviceUuid,
-                customCharUuid: driver.characteristicUuid,
-            });
-            const updated = await getPairedBleDevices();
-            setPairedDevices(updated);
-
-            // Inicia streaming com o driver escolhido
-            startStreaming(connectedDevice, driver);
-
-            // Feedback háptico de conexão realizada
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        } catch (e) {
-            console.error('[useBLE] Erro ao conectar:', e);
-            setConnectionStatus('Erro Conexão');
-            setDevice(null);
-        }
-    }, []);
-
-    // 3. Iniciar Escuta (Monitor / Subscribe) da Característica
+    // 2. Iniciar Escuta (Monitor / Subscribe) da Característica
     const startStreaming = useCallback((connectedDevice: Device, driver: BleDeviceDriver) => {
         let subscription: Subscription | null = null;
 
@@ -127,6 +96,80 @@ export function useBLE() {
         };
     }, []);
 
+    // 3. Conectar a um dispositivo usando um Driver específico
+    const connectToDevice = useCallback(async (targetDevice: Device, driver: BleDeviceDriver) => {
+        try {
+            setConnectionStatus('Conectando...');
+            const connectedDevice = await targetDevice.connect();
+            setDevice(connectedDevice);
+            setActiveDriver(driver);
+
+            await connectedDevice.discoverAllServicesAndCharacteristics();
+            setConnectionStatus('Conectado');
+
+            // Leitura opcional do Battery Service (0x180F / 0x2A19)
+            try {
+                const services = await connectedDevice.services();
+                const batteryService = services.find(s => s.uuid.toLowerCase().includes('180f'));
+                if (batteryService) {
+                    const chars = await batteryService.characteristics();
+                    const batteryChar = chars.find(c => c.uuid.toLowerCase().includes('2a19'));
+                    if (batteryChar) {
+                        const readChar = await batteryChar.read();
+                        if (readChar?.value) {
+                            const bytes = toByteArray(readChar.value);
+                            if (bytes.length > 0) {
+                                setBatteryLevel(bytes[0]);
+                            }
+                        }
+                    }
+                }
+            } catch {
+                // Dispositivo não possui Battery Service padrão (normal em ESP32 custom)
+            }
+
+            // Salva na lista de pareados para reconexão rápida
+            await savePairedBleDevice({
+                id: connectedDevice.id,
+                name: connectedDevice.name || 'Dispositivo Metrológico',
+                driverId: driver.id,
+                customServiceUuid: driver.serviceUuid,
+                customCharUuid: driver.characteristicUuid,
+            });
+            const updated = await getPairedBleDevices();
+            setPairedDevices(updated);
+
+            // Inicia streaming com o driver escolhido
+            startStreaming(connectedDevice, driver);
+
+            // Listener de desconexão para auto-reconexão silenciosa
+            connectedDevice.onDisconnected((error) => {
+                setConnectionStatus('Desconectado');
+                setDevice(null);
+                setBatteryLevel(null);
+                if (error) {
+                    console.log('[useBLE] Desconexão imprevista do dispositivo, tentando auto-reconexão...');
+                    setTimeout(() => {
+                        targetDevice.connect()
+                            .then(reconnected => {
+                                setDevice(reconnected);
+                                setConnectionStatus('Conectado');
+                                startStreaming(reconnected, driver);
+                            })
+                            .catch(() => {});
+                    }, 2500);
+                }
+            });
+
+            // Feedback háptico de conexão realizada
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        } catch (e) {
+            console.error('[useBLE] Erro ao conectar:', e);
+            setConnectionStatus('Erro Conexão');
+            setDevice(null);
+        }
+    }, [startStreaming]);
+
     // 4. Escanear e Conectar Automaticamente (Compatibilidade Total com ESP32 atual)
     const scanAndConnect = useCallback(async () => {
         const permission = await requestPermissions();
@@ -136,12 +179,14 @@ export function useBLE() {
         }
 
         setConnectionStatus('Escaneando...');
+        setIsScanning(true);
         setScannedDevices([]);
 
         manager.startDeviceScan(null, null, (error, scannedDevice) => {
             if (error) {
                 console.warn('[useBLE] Erro Scan:', error);
                 setConnectionStatus('Erro Scan');
+                setIsScanning(false);
                 return;
             }
 
@@ -156,6 +201,7 @@ export function useBLE() {
                 const name = scannedDevice.name;
                 if (name === 'EspDRO_BT' || name === 'EspDRO_BLE') {
                     manager.stopDeviceScan();
+                    setIsScanning(false);
                     connectToDevice(scannedDevice, NordicUartDriver);
                 }
             }
@@ -211,6 +257,12 @@ export function useBLE() {
         allDrivers: REGISTERED_DRIVERS,
         connectWithDriver,
         disconnect,
-        stopScan: () => manager.stopDeviceScan()
+        batteryLevel,
+        isScanning,
+        stopScan: () => {
+            manager.stopDeviceScan();
+            setIsScanning(false);
+            setConnectionStatus(device ? 'Conectado' : 'Desconectado');
+        }
     };
 }
