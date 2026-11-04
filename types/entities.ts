@@ -31,6 +31,8 @@ export type Machine = {
     description?: string;
     status: 'operational' | 'maintenance' | 'offline' | string;
     metadata?: Record<string, any>;
+    station?: Station;
+    nodes?: IoTNode[];
 };
 
 export type Station = {

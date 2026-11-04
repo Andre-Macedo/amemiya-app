@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import { PermissionsAndroid, Platform } from 'react-native';
 import { BleManager, Device, Subscription } from 'react-native-ble-plx';
 import * as Haptics from 'expo-haptics';
-import { toByteArray } from 'react-native-quick-base64';
+import { toByteArray, btoa } from 'react-native-quick-base64';
 
 import {
     BleConnectionStatus,
@@ -16,6 +16,10 @@ import {
     NordicUartDriver,
     createGenericCustomDriver
 } from '@/services/ble/drivers';
+import {
+    NORDIC_UART_CHAR_RX_UUID,
+    NORDIC_UART_SERVICE_UUID
+} from '@/services/ble/drivers/nordic-uart.driver';
 import {
     getPairedBleDevices,
     savePairedBleDevice
@@ -241,6 +245,39 @@ export function useBLE() {
         setActiveReading(null);
     }, [device]);
 
+    const sendBleCommand = useCallback(async (commandString: string): Promise<boolean> => {
+        if (!device) {
+            console.warn('[useBLE] Dispositivo não conectado para envio de comando');
+            return false;
+        }
+
+        try {
+            const base64Data = btoa(commandString);
+            const targetChar = NORDIC_UART_CHAR_RX_UUID;
+            const targetService = NORDIC_UART_SERVICE_UUID;
+
+            try {
+                await device.writeCharacteristicWithResponseForService(
+                    targetService,
+                    targetChar,
+                    base64Data
+                );
+            } catch {
+                await device.writeCharacteristicWithoutResponseForService(
+                    targetService,
+                    targetChar,
+                    base64Data
+                );
+            }
+
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+            return true;
+        } catch (e) {
+            console.warn('[useBLE] Falha ao enviar comando via BLE:', e);
+            return false;
+        }
+    }, [device]);
+
     return {
         // Campos originais preservados (100% retrocompatível)
         scanAndConnect,
@@ -257,6 +294,7 @@ export function useBLE() {
         allDrivers: REGISTERED_DRIVERS,
         connectWithDriver,
         disconnect,
+        sendBleCommand,
         batteryLevel,
         isScanning,
         stopScan: () => {

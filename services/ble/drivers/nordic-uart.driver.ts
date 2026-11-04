@@ -3,6 +3,32 @@ import { BleDeviceDriver, MetrologyBleReading } from '../ble-types';
 
 export const NORDIC_UART_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E".toLowerCase();
 export const NORDIC_UART_CHAR_TX_UUID = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E".toLowerCase();
+export const NORDIC_UART_CHAR_RX_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E".toLowerCase();
+
+/**
+ * Constrói comando serial ASCII para envio à bancada / ESP32 via Nordic UART.
+ */
+export const buildNordicUartCommand = (
+    command: 'start' | 'stop' | 'emergency_stop' | 'set_rpm' | 'toggle_relay' | 'reset_alarm' | string,
+    options?: { rpm?: number; relay_index?: number; relay_state?: boolean }
+): string => {
+    switch (command) {
+        case 'emergency_stop':
+            return 'CMD:ESTOP\n';
+        case 'start':
+            return 'CMD:START\n';
+        case 'stop':
+            return 'CMD:STOP\n';
+        case 'set_rpm':
+            return `CMD:SET_RPM:${options?.rpm ?? 1750}\n`;
+        case 'toggle_relay':
+            return `CMD:RELAY:${options?.relay_index ?? 1}:${options?.relay_state ? '1' : '0'}\n`;
+        case 'reset_alarm':
+            return 'CMD:RESET\n';
+        default:
+            return `CMD:${command.toUpperCase()}\n`;
+    }
+};
 
 /**
  * Driver para hardware ESP32 / Conversores UART / Pedal de bancada

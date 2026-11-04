@@ -77,6 +77,33 @@ export default function MachineDetailScreen() {
                     </View>
                 </Pressable>
 
+                {/* Card de Controle Remoto e Atuação (E-STOP, Rotação e Relés) */}
+                <Pressable
+                    style={[styles.hmiBannerCard, { borderColor: '#1A365D44', backgroundColor: '#1A365D10', marginTop: 10 }]}
+                    onPress={() => router.push({ pathname: '/(app)/remote-control', params: { machineId: machine.id } } as any)}
+                >
+                    <View style={styles.hmiBannerLeft}>
+                        <View style={[styles.hmiIconContainer, { backgroundColor: '#1A365D20' }]}>
+                            <Ionicons name="radio-outline" size={24} color="#1A365D" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <Text style={[styles.hmiBannerTitle, { color: '#1A365D' }]}>Controle Remoto da Bancada</Text>
+                                <View style={[styles.hmiResolutionPill, { backgroundColor: '#E2E8F0' }]}>
+                                    <Text style={[styles.hmiResolutionText, { color: '#1A365D' }]}>NR-12 / BLE / MQTT</Text>
+                                </View>
+                            </View>
+                            <Text style={styles.hmiBannerSubtitle}>
+                                Ligar/Desligar Motor, Parada E-STOP, Ajuste de RPM e Relés
+                            </Text>
+                        </View>
+                    </View>
+                    <View style={[styles.hmiOpenButton, { backgroundColor: '#1A365D15' }]}>
+                        <Text style={[styles.hmiOpenButtonText, { color: '#1A365D' }]}>Atuar</Text>
+                        <Ionicons name="arrow-forward" size={14} color="#1A365D" />
+                    </View>
+                </Pressable>
+
                 {/* Header Card da Máquina */}
                 <View style={[styles.infoCard, { backgroundColor: cardBg, borderColor: border }]}>
                     <View style={styles.headerRow}>

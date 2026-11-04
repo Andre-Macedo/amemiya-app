@@ -84,6 +84,15 @@ export default function AppLayout() {
             />
 
             <Drawer.Screen
+                name="remote-control"
+                options={{
+                    drawerLabel: 'Controle Remoto',
+                    title: 'Controle Remoto Industrial',
+                    drawerIcon: ({ color }) => <DrawerIcon name="radio-outline" color={color} />,
+                }}
+            />
+
+            <Drawer.Screen
                 name="iot/index"
                 options={{
                     drawerLabel: 'Sensores IoT & IHM',

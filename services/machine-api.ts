@@ -16,4 +16,27 @@ export const machineApi = {
         }>(`/machines/${machineId}`);
         return data.data;
     },
+
+    sendCommand: async (
+        machineId: string,
+        params: {
+            command: 'start' | 'stop' | 'emergency_stop' | 'set_rpm' | 'toggle_relay' | 'reset_alarm' | 'set_alarm_state';
+            rpm?: number;
+            relay_index?: number;
+            relay_state?: boolean;
+            state?: string;
+            reason?: string;
+        }
+    ) => {
+        const { data } = await api.post<{
+            success: boolean;
+            message: string;
+            command_id: string;
+            command: string;
+            machine_status: string;
+            topics?: string[];
+            dispatched_at: string;
+        }>(`/machines/${machineId}/command`, params);
+        return data;
+    },
 };

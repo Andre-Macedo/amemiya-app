@@ -62,6 +62,13 @@ export default function MachineHmiDedicatedScreen() {
                 </View>
 
                 <Pressable
+                    style={styles.actionBtn}
+                    onPress={() => router.push({ pathname: '/(app)/remote-control', params: { machineId: machine.id } } as any)}
+                >
+                    <Ionicons name="radio-outline" size={20} color="#64B5F6" />
+                </Pressable>
+
+                <Pressable
                     style={[styles.actionBtn, isFullscreenView && { backgroundColor: '#00E67622' }]}
                     onPress={() => setIsFullscreenView(prev => !prev)}
                 >
