@@ -58,7 +58,7 @@ Este documento define o plano de evolução técnica e operacional do aplicativo
 ## 🟣 Prioridade 5: Chão de Fábrica, IHM & Diagnóstico Preditivo (ISO 20816)
 - [x] **Evolução do Terminal IHM LCD 3.5" (`machine-hmi-panel.tsx`):**
   - Suporte a Landscape fullscreen para suporte de máquinas industriais e alarme háptico de vibração em Zona D (Perigo - ISO 20816-3).
-- [ ] **Abertura Rápida de Ordem de Serviço pelo Celular:**
+- [x] **Abertura Rápida de Ordem de Serviço pelo Celular:**
   - A partir da tela da máquina ou do nó IoT, botão direto para criar Ordem de Serviço preditiva / corretiva com foto tirada na hora pela câmera.
 
 ---
@@ -70,5 +70,5 @@ Este documento define o plano de evolução técnica e operacional do aplicativo
   - Testes dos fluxos de Login e Seleção de Instrumentos.
 - [x] **Workflow de CI no GitHub Actions (`.github/workflows/app-ci.yml`):**
   - Pipeline automático com `tsc --noEmit`, `npm run lint` e `npm test`.
-- [ ] **Configuração do EAS Build (Expo Application Services):**
+- [x] **Configuração do EAS Build (Expo Application Services):**
   - Configuração de perfis `preview` (geração de APK direto) e `production` (Google Play / App Store).

@@ -104,6 +104,36 @@ export default function MachineDetailScreen() {
                     </View>
                 </Pressable>
 
+                {/* Card de Abertura Rápida de Ordem de Serviço */}
+                <Pressable
+                    style={[styles.hmiBannerCard, { borderColor: '#3182CE44', backgroundColor: '#3182CE10', marginTop: 10 }]}
+                    onPress={() => router.push({
+                        pathname: '/(app)/work-orders/create',
+                        params: { machineId: machine.id, machineName: machine.name },
+                    } as any)}
+                >
+                    <View style={styles.hmiBannerLeft}>
+                        <View style={[styles.hmiIconContainer, { backgroundColor: '#3182CE20' }]}>
+                            <Ionicons name="construct-outline" size={24} color="#3182CE" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                                <Text style={[styles.hmiBannerTitle, { color: '#3182CE' }]}>Ordem de Serviço</Text>
+                                <View style={[styles.hmiResolutionPill, { backgroundColor: '#BEE3F8' }]}>
+                                    <Text style={[styles.hmiResolutionText, { color: '#2B6CB0' }]}>CAMPO & FOTO</Text>
+                                </View>
+                            </View>
+                            <Text style={styles.hmiBannerSubtitle}>
+                                Registrar O.S. preditiva ou corretiva com evidência fotográfica
+                            </Text>
+                        </View>
+                    </View>
+                    <View style={[styles.hmiOpenButton, { backgroundColor: '#3182CE15' }]}>
+                        <Text style={[styles.hmiOpenButtonText, { color: '#3182CE' }]}>Criar O.S.</Text>
+                        <Ionicons name="arrow-forward" size={14} color="#3182CE" />
+                    </View>
+                </Pressable>
+
                 {/* Header Card da Máquina */}
                 <View style={[styles.infoCard, { backgroundColor: cardBg, borderColor: border }]}>
                     <View style={styles.headerRow}>

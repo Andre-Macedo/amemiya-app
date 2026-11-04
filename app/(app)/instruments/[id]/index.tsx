@@ -93,6 +93,29 @@ export default function InstrumentDetailsScreen() {
                     <DetailItem label="Última Calib." value="15/05/2024" icon="calendar-outline" color={text} subColor={textSec} />
                 </View>
 
+                {/* Abrir Ordem de Serviço */}
+                <Pressable
+                    style={({ pressed }) => [
+                        styles.actionButton,
+                        { backgroundColor: cardBg, borderColor: border, opacity: pressed ? 0.7 : 1, marginTop: 16 },
+                    ]}
+                    onPress={() => router.push({
+                        pathname: '/(app)/work-orders/create',
+                        params: { instrumentId: id, instrumentName: instrument?.name },
+                    } as any)}
+                >
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                        <View style={[styles.miniIcon, { backgroundColor: '#3182CE15' }]}>
+                            <Ionicons name="construct-outline" size={20} color="#3182CE" />
+                        </View>
+                        <View>
+                            <Text style={[styles.actionTitle, { color: text }]}>Ordem de Serviço (O.S.)</Text>
+                            <Text style={[styles.actionSub, { color: textSec }]}>Registrar envio ou manutenção com foto</Text>
+                        </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={20} color={textSec} />
+                </Pressable>
+
                 <Pressable
                     style={({pressed}) => [
                         styles.actionButton,
