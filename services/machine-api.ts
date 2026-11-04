@@ -20,7 +20,17 @@ export const machineApi = {
     sendCommand: async (
         machineId: string,
         params: {
-            command: 'start' | 'stop' | 'emergency_stop' | 'set_rpm' | 'toggle_relay' | 'reset_alarm' | 'set_alarm_state';
+            command:
+                | 'silence_buzzer'
+                | 'reset_alarm'
+                | 'test_buzzer'
+                | 'emergency_stop'
+                | 'start'
+                | 'stop'
+                | 'set_rpm'
+                | 'toggle_relay'
+                | 'set_alarm_state'
+                | string;
             rpm?: number;
             relay_index?: number;
             relay_state?: boolean;

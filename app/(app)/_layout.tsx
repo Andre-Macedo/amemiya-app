@@ -86,9 +86,9 @@ export default function AppLayout() {
             <Drawer.Screen
                 name="remote-control"
                 options={{
-                    drawerLabel: 'Controle Remoto',
-                    title: 'Controle Remoto Industrial',
-                    drawerIcon: ({ color }) => <DrawerIcon name="radio-outline" color={color} />,
+                    drawerLabel: 'Silenciador de Alarme',
+                    title: 'Silenciador de Alarme',
+                    drawerIcon: ({ color }) => <DrawerIcon name="volume-mute-outline" color={color} />,
                 }}
             />
 

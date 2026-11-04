@@ -7,7 +7,6 @@ import {
     Pressable,
     ActivityIndicator,
     Alert,
-    TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -22,6 +21,7 @@ import { useBLE } from '@/hooks/use-ble';
 import { buildNordicUartCommand } from '@/services/ble/drivers/nordic-uart.driver';
 
 type ControlChannel = 'mqtt' | 'ble';
+type BuzzerStatus = 'active' | 'silenced' | 'normal';
 
 interface CommandLogItem {
     id: string;
@@ -42,7 +42,7 @@ export default function RemoteControlScreen() {
     const textSec = useThemeColor({}, 'textSecondary');
     const border = useThemeColor({}, 'border');
 
-    // Estado de Seleção de Máquina e Canal
+    // Seleção de Máquina e Canal
     const { data: machines, isLoading: loadingMachines, refetch: refetchMachines } = useMachines();
     const [selectedMachineId, setSelectedMachineId] = useState<string | null>(machineId || null);
     const [channel, setChannel] = useState<ControlChannel>('mqtt');
@@ -58,11 +58,9 @@ export default function RemoteControlScreen() {
         sendBleCommand,
     } = useBLE();
 
-    // Estados de Atuação
-    const [targetRpm, setTargetRpm] = useState<number>(1750);
+    // Estados de Atuação do Buzzer
+    const [buzzerStatus, setBuzzerStatus] = useState<BuzzerStatus>('normal');
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
-    const [relay1, setRelay1] = useState<boolean>(false);
-    const [relay2, setRelay2] = useState<boolean>(false);
 
     // Histórico de Comandos da Sessão
     const [commandLogs, setCommandLogs] = useState<CommandLogItem[]>([]);
@@ -90,8 +88,8 @@ export default function RemoteControlScreen() {
 
     // 1. Despacho Unificado de Comandos (Nuvem/MQTT ou BLE)
     const executeCommand = async (
-        command: 'start' | 'stop' | 'emergency_stop' | 'set_rpm' | 'toggle_relay' | 'reset_alarm',
-        options?: { rpm?: number; relay_index?: number; relay_state?: boolean; reason?: string }
+        command: 'silence_buzzer' | 'reset_alarm' | 'test_buzzer' | 'emergency_stop',
+        reason?: string
     ) => {
         if (channel === 'ble') {
             if (!isBleConnected) {
@@ -101,15 +99,21 @@ export default function RemoteControlScreen() {
 
             setIsSubmitting(true);
             try {
-                const uartPayload = buildNordicUartCommand(command, options);
+                const uartPayload = buildNordicUartCommand(command, { reason });
                 const ok = await sendBleCommand(uartPayload);
                 if (ok) {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
                     logCommand(command, true, `BLE UART: ${uartPayload.trim()}`);
+
+                    if (command === 'silence_buzzer') {
+                        setBuzzerStatus('silenced');
+                    } else if (command === 'reset_alarm') {
+                        setBuzzerStatus('normal');
+                    }
                 } else {
                     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
                     logCommand(command, false, 'Falha de transmissão BLE');
-                    Alert.alert('Erro BLE', 'Não foi possível enviar o comando para o microcontrolador.');
+                    Alert.alert('Erro BLE', 'Não foi possível transmitir o comando para o nó ESP32.');
                 }
             } catch (err) {
                 const errMsg = err instanceof Error ? err.message : 'Erro BLE desconhecido';
@@ -131,19 +135,18 @@ export default function RemoteControlScreen() {
         try {
             const res = await machineApi.sendCommand(currentMachine.id, {
                 command,
-                rpm: options?.rpm,
-                relay_index: options?.relay_index,
-                relay_state: options?.relay_state,
-                reason: options?.reason || `Acionamento via Controle Remoto App (${channel.toUpperCase()})`,
+                reason: reason || `Comando ${command} disparado via app mobile`,
             });
 
-            Haptics.notificationAsync(
-                command === 'emergency_stop'
-                    ? Haptics.NotificationFeedbackType.Error
-                    : Haptics.NotificationFeedbackType.Success
-            ).catch(() => {});
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+            logCommand(command, true, `MQTT ACK: ${res.command_id.substring(0, 8)}...`);
 
-            logCommand(command, true, `MQTT: ${res.command_id.substring(0, 8)}... (${res.machine_status})`);
+            if (command === 'silence_buzzer') {
+                setBuzzerStatus('silenced');
+            } else if (command === 'reset_alarm') {
+                setBuzzerStatus('normal');
+            }
+
             refetchMachines();
         } catch (err) {
             const errMsg = err instanceof Error ? err.message : 'Falha na requisição';
@@ -155,51 +158,10 @@ export default function RemoteControlScreen() {
         }
     };
 
-    // 2. Parada de Emergência com Confirmação e Segurança NR-12
-    const handleEmergencyStop = () => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
-        Alert.alert(
-            'PARADA DE EMERGÊNCIA (E-STOP)',
-            `Confirma o desligamento imediato de todos os acionamentos de potência da máquina ${currentMachine?.name || 'selecionada'}?`,
-            [
-                { text: 'Cancelar', style: 'cancel' },
-                {
-                    text: 'ACIONAR E-STOP',
-                    style: 'destructive',
-                    onPress: () => {
-                        executeCommand('emergency_stop', { reason: 'E-STOP acionado pelo operador no aplicativo móvel' });
-                    },
-                },
-            ],
-            { cancelable: true }
-        );
-    };
-
-    // 3. Ajuste de Rotação
-    const handleApplyRpm = () => {
-        if (targetRpm < 0 || targetRpm > 10000) {
-            Alert.alert('RPM Inválido', 'A velocidade deve estar entre 0 e 10.000 RPM.');
-            return;
-        }
-        executeCommand('set_rpm', { rpm: targetRpm });
-    };
-
-    // 4. Toggle de Relés Auxiliares
-    const handleToggleRelay = (relayIndex: 1 | 2) => {
-        const nextState = relayIndex === 1 ? !relay1 : !relay2;
-        if (relayIndex === 1) setRelay1(nextState);
-        else setRelay2(nextState);
-
-        executeCommand('toggle_relay', {
-            relay_index: relayIndex,
-            relay_state: nextState,
-        });
-    };
-
     return (
         <View style={[styles.screen, { backgroundColor: bg }]}>
             <ScreenHeader
-                title="Controle Remoto"
+                title="Silenciador de Alarme"
                 showBack
                 rightIcon="tv-outline"
                 rightColor="#00A86B"
@@ -211,9 +173,134 @@ export default function RemoteControlScreen() {
             />
 
             <ScrollView contentContainerStyle={styles.scrollContent}>
-                {/* 1. SELETOR DE PROTOCOLO / CANAL */}
+                {/* 1. CALLOUT DE SEGURANÇA E NR-12 */}
+                <View style={[styles.safetyCallout, { borderColor: border }]}>
+                    <Ionicons name="information-circle-outline" size={20} color="#1A365D" />
+                    <View style={{ flex: 1, marginLeft: 8 }}>
+                        <Text style={[styles.safetyTitle, { color: textPrimary }]}>
+                            Operação sem CLP — Segurança Física NR-12
+                        </Text>
+                        <Text style={[styles.safetyText, { color: textSec }]}>
+                            A partida e a parada do motor da Bancada M1 são realizadas exclusivamente através das botoeiras físicas locais no painel elétrico. Este aplicativo atua no reconhecimento (ACK), teste e silenciamento do alarme sonoro (buzzer) do nó sensor ESP32.
+                        </Text>
+                    </View>
+                </View>
+
+                {/* 2. CARD DO STATUS DO ALARME SONORO */}
+                <View
+                    style={[
+                        styles.alarmStatusCard,
+                        buzzerStatus === 'active'
+                            ? styles.alarmActiveBg
+                            : buzzerStatus === 'silenced'
+                            ? styles.alarmSilencedBg
+                            : styles.alarmNormalBg,
+                    ]}
+                >
+                    <View style={styles.alarmStatusHeader}>
+                        <Ionicons
+                            name={
+                                buzzerStatus === 'active'
+                                    ? 'volume-high'
+                                    : buzzerStatus === 'silenced'
+                                    ? 'volume-mute'
+                                    : 'volume-low-outline'
+                            }
+                            size={32}
+                            color={
+                                buzzerStatus === 'active'
+                                    ? '#E53E3E'
+                                    : buzzerStatus === 'silenced'
+                                    ? '#DD6B20'
+                                    : '#00A86B'
+                            }
+                        />
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                            <Text
+                                style={[
+                                    styles.alarmStatusTitle,
+                                    {
+                                        color:
+                                            buzzerStatus === 'active'
+                                                ? '#E53E3E'
+                                                : buzzerStatus === 'silenced'
+                                                ? '#DD6B20'
+                                                : '#00A86B',
+                                    },
+                                ]}
+                            >
+                                {buzzerStatus === 'active'
+                                    ? 'ALARME SONORO ATIVO'
+                                    : buzzerStatus === 'silenced'
+                                    ? 'BUZZER SILENCIADO (EM ANÁLISE)'
+                                    : 'BUZZER EM MODO NORMAL (SILENCIOSO)'}
+                            </Text>
+                            <Text style={styles.alarmStatusSubtitle}>
+                                {buzzerStatus === 'active'
+                                    ? 'Anomalia detectada. Toque abaixo para silenciar o buzzer.'
+                                    : buzzerStatus === 'silenced'
+                                    ? 'Buzzer mutado pelo operador. Falha física aguardando reset.'
+                                    : 'Nenhuma anomalia crítica. Sinalizador sonoro desativado.'}
+                            </Text>
+                        </View>
+                    </View>
+
+                    {/* Botão de Silenciar Buzzer Gigante em Destaque */}
+                    <Pressable
+                        style={[
+                            styles.silenceBuzzerBtn,
+                            buzzerStatus === 'active' ? styles.silenceBtnDanger : styles.silenceBtnNeutral,
+                        ]}
+                        onPress={() => executeCommand('silence_buzzer', 'Silenciamento manual do buzzer pelo operador')}
+                        disabled={isSubmitting}
+                    >
+                        {isSubmitting ? (
+                            <ActivityIndicator size="small" color="#FFFFFF" />
+                        ) : (
+                            <>
+                                <Ionicons name="volume-mute" size={26} color="#FFFFFF" />
+                                <Text style={styles.silenceBuzzerBtnText}>
+                                    SILENCIAR BUZZER AGORA
+                                </Text>
+                            </>
+                        )}
+                    </Pressable>
+                </View>
+
+                {/* 3. AÇÕES DE ALARME E TESTE */}
+                <View style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}>
+                    <Text style={[styles.sectionTitle, { color: textPrimary }]}>Ações de Alarme & Diagnóstico</Text>
+
+                    <View style={styles.actionRow}>
+                        {/* Resetar Alarme */}
+                        <Pressable
+                            style={[styles.secondaryActionBtn, { borderColor: '#1A365D' }]}
+                            onPress={() => executeCommand('reset_alarm', 'Reset de alarme confirmado pelo operador')}
+                            disabled={isSubmitting}
+                        >
+                            <Ionicons name="refresh-circle-outline" size={22} color="#1A365D" />
+                            <Text style={[styles.secondaryActionBtnText, { color: '#1A365D' }]}>
+                                Resetar Alarme
+                            </Text>
+                        </Pressable>
+
+                        {/* Testar Buzzer (Bip curto de 1s) */}
+                        <Pressable
+                            style={[styles.secondaryActionBtn, { borderColor: '#00A86B' }]}
+                            onPress={() => executeCommand('test_buzzer', 'Bip de teste sonoro de 1 segundo')}
+                            disabled={isSubmitting}
+                        >
+                            <Ionicons name="musical-notes-outline" size={22} color="#00A86B" />
+                            <Text style={[styles.secondaryActionBtnText, { color: '#00A86B' }]}>
+                                Testar Buzzer (1s)
+                            </Text>
+                        </Pressable>
+                    </View>
+                </View>
+
+                {/* 4. SELETOR DE PROTOCOLO / CANAL */}
                 <View style={[styles.channelCard, { backgroundColor: cardBg, borderColor: border }]}>
-                    <Text style={[styles.sectionTitle, { color: textPrimary }]}>Canal de Comunicação</Text>
+                    <Text style={[styles.sectionTitle, { color: textPrimary }]}>Canal de Envio do Sinal</Text>
                     <View style={styles.channelRow}>
                         <Pressable
                             style={[
@@ -257,7 +344,7 @@ export default function RemoteControlScreen() {
                                     { color: channel === 'ble' ? '#FFFFFF' : textPrimary },
                                 ]}
                             >
-                                Local BLE Direto
+                                BLE Direto (ESP32)
                             </Text>
                         </Pressable>
                     </View>
@@ -296,14 +383,14 @@ export default function RemoteControlScreen() {
                                     color={isBleConnected ? '#E53E3E' : '#00A86B'}
                                 />
                                 <Text style={{ color: isBleConnected ? '#E53E3E' : '#00A86B', fontFamily: Fonts.sansSemiBold, fontSize: 13, marginLeft: 6 }}>
-                                    {isBleConnected ? 'Desconectar Bancada' : 'Escanear & Conectar'}
+                                    {isBleConnected ? 'Desconectar' : 'Escanear ESP32'}
                                 </Text>
                             </Pressable>
                         </View>
                     )}
                 </View>
 
-                {/* 2. SELETOR DE MÁQUINA */}
+                {/* 5. SELETOR DE MÁQUINA */}
                 {loadingMachines ? (
                     <ActivityIndicator size="small" color="#1A365D" style={{ marginVertical: 10 }} />
                 ) : machines && machines.length > 0 ? (
@@ -311,48 +398,19 @@ export default function RemoteControlScreen() {
                         <View style={styles.machineHeader}>
                             <View>
                                 <Text style={[styles.machineTitle, { color: textPrimary }]}>
-                                    {currentMachine?.name || 'Selecione a Máquina'}
+                                    {currentMachine?.name || 'Bancada M1'}
                                 </Text>
                                 <Text style={[styles.machineSubtitle, { color: textSec }]}>
-                                    {currentMachine?.code} • {currentMachine?.station?.name || 'Posto Principal'}
+                                    {currentMachine?.code} • {currentMachine?.station?.name || 'Posto de Medição'}
                                 </Text>
                             </View>
-                            <View
-                                style={[
-                                    styles.statusPill,
-                                    {
-                                        backgroundColor:
-                                            currentMachine?.status === 'operational'
-                                                ? '#00E67622'
-                                                : currentMachine?.status === 'maintenance'
-                                                ? '#E53E3E22'
-                                                : '#71809622',
-                                    },
-                                ]}
-                            >
-                                <Text
-                                    style={[
-                                        styles.statusPillText,
-                                        {
-                                            color:
-                                                currentMachine?.status === 'operational'
-                                                    ? '#00E676'
-                                                    : currentMachine?.status === 'maintenance'
-                                                    ? '#E53E3E'
-                                                    : '#718096',
-                                        },
-                                    ]}
-                                >
-                                    {currentMachine?.status === 'operational'
-                                        ? 'OPERACIONAL'
-                                        : currentMachine?.status === 'maintenance'
-                                        ? 'MANUTENÇÃO / E-STOP'
-                                        : 'PARADO / IDLE'}
+                            <View style={styles.statusPill}>
+                                <Text style={styles.statusPillText}>
+                                    {currentMachine?.status?.toUpperCase()}
                                 </Text>
                             </View>
                         </View>
 
-                        {/* Lista horizontal se houver mais de uma máquina */}
                         {machines.length > 1 && (
                             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.machineChipsScroll}>
                                 {machines.map(m => (
@@ -380,189 +438,13 @@ export default function RemoteControlScreen() {
                     </View>
                 ) : null}
 
-                {/* 3. PARADA DE EMERGÊNCIA (NR-12) */}
-                <View style={styles.estopSection}>
-                    <Pressable
-                        style={styles.estopButton}
-                        onPress={handleEmergencyStop}
-                        disabled={isSubmitting}
-                    >
-                        <View style={styles.estopRing}>
-                            <View style={styles.estopCore}>
-                                <Ionicons name="hand-left" size={38} color="#FFFFFF" />
-                                <Text style={styles.estopText}>EMERGÊNCIA</Text>
-                                <Text style={styles.estopSub}>E-STOP (NR-12)</Text>
-                            </View>
-                        </View>
-                    </Pressable>
-                    <Text style={[styles.estopDisclaimer, { color: textSec }]}>
-                        Toque no cogumelo para desligamento imediato de emergência com registro de auditoria.
-                    </Text>
-                </View>
-
-                {/* 4. CONTROLE DO MOTOR DA BANCADA */}
-                <View style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}>
-                    <Text style={[styles.sectionTitle, { color: textPrimary }]}>Controle de Potência (Motor M1)</Text>
-                    <View style={styles.motorActionRow}>
-                        <Pressable
-                            style={[styles.motorBtn, styles.motorBtnStart]}
-                            onPress={() => executeCommand('start')}
-                            disabled={isSubmitting}
-                        >
-                            {isSubmitting ? (
-                                <ActivityIndicator size="small" color="#FFFFFF" />
-                            ) : (
-                                <>
-                                    <Ionicons name="play" size={24} color="#FFFFFF" />
-                                    <Text style={styles.motorBtnText}>LIGAR MOTOR</Text>
-                                </>
-                            )}
-                        </Pressable>
-
-                        <Pressable
-                            style={[styles.motorBtn, styles.motorBtnStop]}
-                            onPress={() => executeCommand('stop')}
-                            disabled={isSubmitting}
-                        >
-                            <Ionicons name="stop" size={24} color="#FFFFFF" />
-                            <Text style={styles.motorBtnText}>DESLIGAR</Text>
-                        </Pressable>
-                    </View>
-                </View>
-
-                {/* 5. AJUSTE DE ROTAÇÃO (RPM SETPOINT) */}
-                <View style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}>
-                    <View style={styles.rpmHeader}>
-                        <Text style={[styles.sectionTitle, { color: textPrimary }]}>Setpoint de Rotação (RPM)</Text>
-                        <Text style={styles.rpmValueLarge}>{targetRpm} RPM</Text>
-                    </View>
-
-                    {/* Presets Rápidos */}
-                    <View style={styles.presetRow}>
-                        {[900, 1200, 1750, 3600].map(rpm => (
-                            <Pressable
-                                key={rpm}
-                                style={[
-                                    styles.presetBtn,
-                                    targetRpm === rpm && styles.presetBtnActive,
-                                    { borderColor: border },
-                                ]}
-                                onPress={() => setTargetRpm(rpm)}
-                            >
-                                <Text
-                                    style={[
-                                        styles.presetText,
-                                        targetRpm === rpm && styles.presetTextActive,
-                                        { color: targetRpm === rpm ? '#FFFFFF' : textPrimary },
-                                    ]}
-                                >
-                                    {rpm}
-                                </Text>
-                            </Pressable>
-                        ))}
-                    </View>
-
-                    {/* Stepper e Input */}
-                    <View style={styles.stepperRow}>
-                        <Pressable
-                            style={[styles.stepperBtn, { borderColor: border }]}
-                            onPress={() => setTargetRpm(prev => Math.max(0, prev - 50))}
-                        >
-                            <Ionicons name="remove" size={20} color={textPrimary} />
-                        </Pressable>
-
-                        <TextInput
-                            style={[styles.rpmInput, { color: textPrimary, borderColor: border }]}
-                            keyboardType="numeric"
-                            value={String(targetRpm)}
-                            onChangeText={txt => {
-                                const parsed = parseInt(txt, 10);
-                                if (!isNaN(parsed)) setTargetRpm(parsed);
-                                else if (txt === '') setTargetRpm(0);
-                            }}
-                        />
-
-                        <Pressable
-                            style={[styles.stepperBtn, { borderColor: border }]}
-                            onPress={() => setTargetRpm(prev => Math.min(10000, prev + 50))}
-                        >
-                            <Ionicons name="add" size={20} color={textPrimary} />
-                        </Pressable>
-
-                        <Pressable
-                            style={styles.applyRpmBtn}
-                            onPress={handleApplyRpm}
-                            disabled={isSubmitting}
-                        >
-                            <Ionicons name="checkmark-sharp" size={18} color="#FFFFFF" />
-                            <Text style={styles.applyRpmText}>Aplicar</Text>
-                        </Pressable>
-                    </View>
-                </View>
-
-                {/* 6. ATUADORES AUXILIARES & RELÉS */}
-                <View style={[styles.card, { backgroundColor: cardBg, borderColor: border }]}>
-                    <Text style={[styles.sectionTitle, { color: textPrimary }]}>Atuadores & Periféricos</Text>
-                    
-                    <View style={styles.auxGrid}>
-                        {/* Relé 1: Iluminação */}
-                        <Pressable
-                            style={[
-                                styles.auxCard,
-                                relay1 && styles.auxCardActive,
-                                { borderColor: relay1 ? '#00A86B' : border },
-                            ]}
-                            onPress={() => handleToggleRelay(1)}
-                        >
-                            <Ionicons
-                                name={relay1 ? 'bulb' : 'bulb-outline'}
-                                size={28}
-                                color={relay1 ? '#00A86B' : textSec}
-                            />
-                            <Text style={[styles.auxTitle, { color: textPrimary }]}>Iluminação</Text>
-                            <Text style={[styles.auxState, { color: relay1 ? '#00A86B' : textSec }]}>
-                                {relay1 ? 'LIGADO' : 'DESLIGADO'}
-                            </Text>
-                        </Pressable>
-
-                        {/* Relé 2: Exaustor */}
-                        <Pressable
-                            style={[
-                                styles.auxCard,
-                                relay2 && styles.auxCardActive,
-                                { borderColor: relay2 ? '#00A86B' : border },
-                            ]}
-                            onPress={() => handleToggleRelay(2)}
-                        >
-                            <Ionicons
-                                name={relay2 ? 'sync' : 'sync-outline'}
-                                size={28}
-                                color={relay2 ? '#00A86B' : textSec}
-                            />
-                            <Text style={[styles.auxTitle, { color: textPrimary }]}>Exaustor / Cooler</Text>
-                            <Text style={[styles.auxState, { color: relay2 ? '#00A86B' : textSec }]}>
-                                {relay2 ? 'LIGADO' : 'DESLIGADO'}
-                            </Text>
-                        </Pressable>
-                    </View>
-
-                    {/* Botão de Reset de Alarme */}
-                    <Pressable
-                        style={[styles.resetAlarmBtn, { borderColor: border }]}
-                        onPress={() => executeCommand('reset_alarm')}
-                    >
-                        <Ionicons name="refresh-circle-outline" size={20} color="#1A365D" />
-                        <Text style={styles.resetAlarmText}>Resetar Alarmes & Falhas da Bancada</Text>
-                    </Pressable>
-                </View>
-
-                {/* 7. LOG DE AUDITORIA DA SESSÃO */}
+                {/* 6. LOG DE AUDITORIA DA SESSÃO (ISO 17025) */}
                 <View style={[styles.card, { backgroundColor: cardBg, borderColor: border, marginBottom: 30 }]}>
                     <View style={styles.logHeader}>
                         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                             <Ionicons name="receipt-outline" size={18} color="#1A365D" />
                             <Text style={[styles.sectionTitle, { color: textPrimary, marginLeft: 6 }]}>
-                                Rastreabilidade de Comandos
+                                Histórico de Reconhecimento (ACK)
                             </Text>
                         </View>
                         <Text style={{ fontSize: 11, color: textSec }}>ISO 17025</Text>
@@ -570,7 +452,7 @@ export default function RemoteControlScreen() {
 
                     {commandLogs.length === 0 ? (
                         <Text style={[styles.emptyLogText, { color: textSec }]}>
-                            Nenhum comando despachado nesta sessão.
+                            Nenhuma ação registrada nesta sessão de silenciamento.
                         </Text>
                     ) : (
                         commandLogs.map(item => (
@@ -579,11 +461,17 @@ export default function RemoteControlScreen() {
                                     <Ionicons
                                         name={item.success ? 'checkmark-circle' : 'close-circle'}
                                         size={18}
-                                        color={item.success ? '#00E676' : '#E53E3E'}
+                                        color={item.success ? '#00A86B' : '#E53E3E'}
                                     />
                                     <View style={{ marginLeft: 8 }}>
                                         <Text style={[styles.logCommandName, { color: textPrimary }]}>
-                                            {item.command.toUpperCase()}
+                                            {item.command === 'silence_buzzer'
+                                                ? 'BUZZER SILENCIADO'
+                                                : item.command === 'reset_alarm'
+                                                ? 'ALARME RESETADO'
+                                                : item.command === 'test_buzzer'
+                                                ? 'TESTE SONORO'
+                                                : item.command.toUpperCase()}
                                         </Text>
                                         {item.detail ? (
                                             <Text style={[styles.logDetail, { color: textSec }]} numberOfLines={1}>
@@ -613,6 +501,105 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         padding: 16,
+    },
+    safetyCallout: {
+        flexDirection: 'row',
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        backgroundColor: '#EDF2F7',
+        marginBottom: 14,
+        alignItems: 'flex-start',
+    },
+    safetyTitle: {
+        fontSize: 13,
+        fontFamily: Fonts.sansBold,
+        marginBottom: 2,
+    },
+    safetyText: {
+        fontSize: 11,
+        fontFamily: Fonts.sans,
+        lineHeight: 16,
+    },
+    alarmStatusCard: {
+        padding: 18,
+        borderRadius: 16,
+        borderWidth: 1,
+        marginBottom: 14,
+    },
+    alarmActiveBg: {
+        backgroundColor: '#FFF5F5',
+        borderColor: '#FEB2B2',
+    },
+    alarmSilencedBg: {
+        backgroundColor: '#FFFAF0',
+        borderColor: '#FBD38D',
+    },
+    alarmNormalBg: {
+        backgroundColor: '#F0FFF4',
+        borderColor: '#9AE6B4',
+    },
+    alarmStatusHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    alarmStatusTitle: {
+        fontSize: 15,
+        fontFamily: Fonts.sansBold,
+        letterSpacing: 0.5,
+    },
+    alarmStatusSubtitle: {
+        fontSize: 12,
+        fontFamily: Fonts.sans,
+        color: '#718096',
+        marginTop: 2,
+    },
+    silenceBuzzerBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 16,
+        borderRadius: 12,
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.25,
+        shadowRadius: 5,
+        elevation: 4,
+    },
+    silenceBtnDanger: {
+        backgroundColor: '#E53E3E',
+        shadowColor: '#E53E3E',
+    },
+    silenceBtnNeutral: {
+        backgroundColor: '#DD6B20',
+        shadowColor: '#DD6B20',
+    },
+    silenceBuzzerBtnText: {
+        color: '#FFFFFF',
+        fontFamily: Fonts.sansBold,
+        fontSize: 15,
+        marginLeft: 10,
+        letterSpacing: 0.5,
+    },
+    actionRow: {
+        flexDirection: 'row',
+        gap: 12,
+        marginTop: 4,
+    },
+    secondaryActionBtn: {
+        flex: 1,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 12,
+        borderRadius: 10,
+        borderWidth: 1.5,
+        backgroundColor: '#FFFFFF',
+    },
+    secondaryActionBtnText: {
+        fontSize: 13,
+        fontFamily: Fonts.sansSemiBold,
+        marginLeft: 6,
     },
     channelCard: {
         padding: 14,
@@ -685,7 +672,7 @@ const styles = StyleSheet.create({
     },
     batteryText: {
         fontSize: 11,
-        color: '#00E676',
+        color: '#00A86B',
         marginLeft: 2,
         fontFamily: Fonts.sansSemiBold,
     },
@@ -720,10 +707,12 @@ const styles = StyleSheet.create({
         paddingHorizontal: 8,
         paddingVertical: 3,
         borderRadius: 6,
+        backgroundColor: '#E2E8F0',
     },
     statusPillText: {
         fontSize: 10,
         fontFamily: Fonts.sansBold,
+        color: '#4A5568',
         letterSpacing: 0.5,
     },
     machineChipsScroll: {
@@ -743,196 +732,6 @@ const styles = StyleSheet.create({
     machineChipText: {
         fontSize: 12,
         fontFamily: Fonts.sansSemiBold,
-    },
-    estopSection: {
-        alignItems: 'center',
-        marginVertical: 10,
-    },
-    estopButton: {
-        width: 140,
-        height: 140,
-        borderRadius: 70,
-        backgroundColor: '#B91C1C',
-        justifyContent: 'center',
-        alignItems: 'center',
-        shadowColor: '#EF4444',
-        shadowOffset: { width: 0, height: 6 },
-        shadowOpacity: 0.45,
-        shadowRadius: 10,
-        elevation: 10,
-    },
-    estopRing: {
-        width: 124,
-        height: 124,
-        borderRadius: 62,
-        borderWidth: 4,
-        borderColor: '#FCA5A5',
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: '#DC2626',
-    },
-    estopCore: {
-        alignItems: 'center',
-    },
-    estopText: {
-        color: '#FFFFFF',
-        fontFamily: Fonts.sansBold,
-        fontSize: 13,
-        letterSpacing: 1,
-        marginTop: 4,
-    },
-    estopSub: {
-        color: '#FEE2E2',
-        fontSize: 9,
-        fontFamily: Fonts.sansSemiBold,
-    },
-    estopDisclaimer: {
-        fontSize: 11,
-        textAlign: 'center',
-        marginTop: 10,
-        maxWidth: 280,
-    },
-    motorActionRow: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    motorBtn: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 14,
-        borderRadius: 12,
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.2,
-        shadowRadius: 4,
-        elevation: 3,
-    },
-    motorBtnStart: {
-        backgroundColor: '#10B981',
-        shadowColor: '#10B981',
-    },
-    motorBtnStop: {
-        backgroundColor: '#334155',
-        shadowColor: '#334155',
-    },
-    motorBtnText: {
-        color: '#FFFFFF',
-        fontFamily: Fonts.sansBold,
-        fontSize: 14,
-        marginLeft: 8,
-        letterSpacing: 0.5,
-    },
-    rpmHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    rpmValueLarge: {
-        fontSize: 18,
-        fontFamily: Fonts.sansBold,
-        color: '#00A86B',
-    },
-    presetRow: {
-        flexDirection: 'row',
-        gap: 8,
-        marginVertical: 12,
-    },
-    presetBtn: {
-        flex: 1,
-        paddingVertical: 8,
-        borderRadius: 8,
-        borderWidth: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    presetBtnActive: {
-        backgroundColor: '#1A365D',
-        borderColor: '#1A365D',
-    },
-    presetText: {
-        fontSize: 12,
-        fontFamily: Fonts.sansSemiBold,
-    },
-    presetTextActive: {
-        color: '#FFFFFF',
-    },
-    stepperRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8,
-    },
-    stepperBtn: {
-        width: 42,
-        height: 42,
-        borderRadius: 10,
-        borderWidth: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    rpmInput: {
-        flex: 1,
-        height: 42,
-        borderRadius: 10,
-        borderWidth: 1,
-        textAlign: 'center',
-        fontSize: 16,
-        fontFamily: Fonts.sansSemiBold,
-    },
-    applyRpmBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#1A365D',
-        paddingHorizontal: 14,
-        height: 42,
-        borderRadius: 10,
-    },
-    applyRpmText: {
-        color: '#FFFFFF',
-        fontFamily: Fonts.sansSemiBold,
-        fontSize: 13,
-        marginLeft: 4,
-    },
-    auxGrid: {
-        flexDirection: 'row',
-        gap: 12,
-        marginBottom: 12,
-    },
-    auxCard: {
-        flex: 1,
-        padding: 14,
-        borderRadius: 12,
-        borderWidth: 1,
-        alignItems: 'center',
-    },
-    auxCardActive: {
-        backgroundColor: '#00A86B0A',
-    },
-    auxTitle: {
-        fontSize: 13,
-        fontFamily: Fonts.sansSemiBold,
-        marginTop: 6,
-        textAlign: 'center',
-    },
-    auxState: {
-        fontSize: 11,
-        fontFamily: Fonts.sansBold,
-        marginTop: 2,
-    },
-    resetAlarmBtn: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 10,
-        borderRadius: 10,
-        borderWidth: 1,
-        backgroundColor: '#F8FAFC',
-    },
-    resetAlarmText: {
-        fontSize: 13,
-        fontFamily: Fonts.sansSemiBold,
-        color: '#1A365D',
-        marginLeft: 6,
     },
     logHeader: {
         flexDirection: 'row',

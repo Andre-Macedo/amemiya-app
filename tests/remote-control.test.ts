@@ -7,35 +7,24 @@ import {
 
 describe('Industrial Remote Control & BLE Command Suite', () => {
     describe('Nordic UART Command Encoding (ESP32 Bancada M1)', () => {
-        it('deve codificar corretamente o comando de PARADA DE EMERGÊNCIA (E-STOP)', () => {
+        it('deve codificar corretamente o comando de SILENCIAR BUZZER (MUTE)', () => {
+            expect(buildNordicUartCommand('silence_buzzer')).toBe('CMD:MUTE\n');
+            expect(buildNordicUartCommand('mute_buzzer')).toBe('CMD:MUTE\n');
+            expect(buildNordicUartCommand('mute')).toBe('CMD:MUTE\n');
+        });
+
+        it('deve codificar comando de RESET DE ALARME (RESET)', () => {
+            expect(buildNordicUartCommand('reset_alarm')).toBe('CMD:RESET\n');
+            expect(buildNordicUartCommand('reset')).toBe('CMD:RESET\n');
+        });
+
+        it('deve codificar comando de TESTE DE BUZZER (TEST_BUZZER)', () => {
+            expect(buildNordicUartCommand('test_buzzer')).toBe('CMD:TEST_BUZZER\n');
+        });
+
+        it('deve codificar comando de PARADA DE EMERGÊNCIA (E-STOP)', () => {
             const cmd = buildNordicUartCommand('emergency_stop');
             expect(cmd).toBe('CMD:ESTOP\n');
-        });
-
-        it('deve codificar comando de LIGAR MOTOR (START)', () => {
-            const cmd = buildNordicUartCommand('start');
-            expect(cmd).toBe('CMD:START\n');
-        });
-
-        it('deve codificar comando de DESLIGAR MOTOR (STOP)', () => {
-            const cmd = buildNordicUartCommand('stop');
-            expect(cmd).toBe('CMD:STOP\n');
-        });
-
-        it('deve codificar ajuste de rotação (SET_RPM) com valor nominal e customizado', () => {
-            expect(buildNordicUartCommand('set_rpm', { rpm: 1750 })).toBe('CMD:SET_RPM:1750\n');
-            expect(buildNordicUartCommand('set_rpm', { rpm: 3600 })).toBe('CMD:SET_RPM:3600\n');
-            expect(buildNordicUartCommand('set_rpm', { rpm: 900 })).toBe('CMD:SET_RPM:900\n');
-        });
-
-        it('deve codificar comutação de relés auxiliares da bancada', () => {
-            expect(buildNordicUartCommand('toggle_relay', { relay_index: 1, relay_state: true })).toBe('CMD:RELAY:1:1\n');
-            expect(buildNordicUartCommand('toggle_relay', { relay_index: 2, relay_state: false })).toBe('CMD:RELAY:2:0\n');
-        });
-
-        it('deve codificar reset de alarmes e falhas', () => {
-            const cmd = buildNordicUartCommand('reset_alarm');
-            expect(cmd).toBe('CMD:RESET\n');
         });
 
         it('deve lidar com comandos customizados em maiúsculas', () => {

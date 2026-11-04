@@ -77,30 +77,30 @@ export default function MachineDetailScreen() {
                     </View>
                 </Pressable>
 
-                {/* Card de Controle Remoto e Atuação (E-STOP, Rotação e Relés) */}
+                {/* Card de Silenciador e Alarme (Buzzer & ACK) */}
                 <Pressable
-                    style={[styles.hmiBannerCard, { borderColor: '#1A365D44', backgroundColor: '#1A365D10', marginTop: 10 }]}
+                    style={[styles.hmiBannerCard, { borderColor: '#DD6B2044', backgroundColor: '#DD6B2010', marginTop: 10 }]}
                     onPress={() => router.push({ pathname: '/(app)/remote-control', params: { machineId: machine.id } } as any)}
                 >
                     <View style={styles.hmiBannerLeft}>
-                        <View style={[styles.hmiIconContainer, { backgroundColor: '#1A365D20' }]}>
-                            <Ionicons name="radio-outline" size={24} color="#1A365D" />
+                        <View style={[styles.hmiIconContainer, { backgroundColor: '#DD6B2020' }]}>
+                            <Ionicons name="volume-mute-outline" size={24} color="#DD6B20" />
                         </View>
                         <View style={{ flex: 1 }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                                <Text style={[styles.hmiBannerTitle, { color: '#1A365D' }]}>Controle Remoto da Bancada</Text>
-                                <View style={[styles.hmiResolutionPill, { backgroundColor: '#E2E8F0' }]}>
-                                    <Text style={[styles.hmiResolutionText, { color: '#1A365D' }]}>NR-12 / BLE / MQTT</Text>
+                                <Text style={[styles.hmiBannerTitle, { color: '#DD6B20' }]}>Silenciador de Alarme</Text>
+                                <View style={[styles.hmiResolutionPill, { backgroundColor: '#FEEBC8' }]}>
+                                    <Text style={[styles.hmiResolutionText, { color: '#C05621' }]}>BUZZER & ACK</Text>
                                 </View>
                             </View>
                             <Text style={styles.hmiBannerSubtitle}>
-                                Ligar/Desligar Motor, Parada E-STOP, Ajuste de RPM e Relés
+                                Silenciar Buzzer, Reconhecer Alarme e Teste Sonoro (BLE / MQTT)
                             </Text>
                         </View>
                     </View>
-                    <View style={[styles.hmiOpenButton, { backgroundColor: '#1A365D15' }]}>
-                        <Text style={[styles.hmiOpenButtonText, { color: '#1A365D' }]}>Atuar</Text>
-                        <Ionicons name="arrow-forward" size={14} color="#1A365D" />
+                    <View style={[styles.hmiOpenButton, { backgroundColor: '#DD6B2015' }]}>
+                        <Text style={[styles.hmiOpenButtonText, { color: '#DD6B20' }]}>Silenciar</Text>
+                        <Ionicons name="arrow-forward" size={14} color="#DD6B20" />
                     </View>
                 </Pressable>
 

@@ -65,7 +65,7 @@ export default function MachineHmiDedicatedScreen() {
                     style={styles.actionBtn}
                     onPress={() => router.push({ pathname: '/(app)/remote-control', params: { machineId: machine.id } } as any)}
                 >
-                    <Ionicons name="radio-outline" size={20} color="#64B5F6" />
+                    <Ionicons name="volume-mute-outline" size={20} color="#FFB74D" />
                 </Pressable>
 
                 <Pressable
